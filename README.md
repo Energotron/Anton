@@ -1,27 +1,56 @@
-# KR3 Prototype
+# Космические Рейнджеры 3: Дети Эльтана
 
-Sci-fi RPG / sandbox prototype inspired by the feeling of **Space Rangers**: living galaxy, factions, text quests, trade, travel, and story arcs.
+Настоящий KR3-концепт: мрачная, сюжетная, системная космическая RPG/strategy sandbox в духе **Space Rangers**, но с упором на **Умную Дипломатию**, войну в нескольких измерениях и объединение несовместимых рас.
 
-## Mission
-Build a playable vertical slice first:
-- galaxy map
-- travel between systems
-- factions and reputation
-- text quest engine
-- basic economy
-- one story arc
+## High Concept
+Спустя 250 лет после КР2 галактика снова стоит на краю уничтожения. Махпеллы вернулись, а их оружие **«Исказитель Реальности»** стирает целые системы. Единственная надежда — древнее пророчество гаальцев о **Детях Эльтана**, существах, способных объединить несовместимое и создать невозможный альянс.
+
+Игрок — рейнджер-визионер, который должен собрать этот альянс, найти Келлера, войти в глубокий гипер и вернуть в обычный космос силы, ушедшие в тень черных дыр.
+
+## Core Dimensions (Z-Mechanic)
+- **Обычный космос** — дипломатия, торговля, исследования, политика Коалиции.
+- **Глубокое гиперпространство** — война Келлера, аномалии, скрытные операции, диверсии.
+- **Режим Чёрной Дыры** — сюрреалистичные теневые миры, древние флоты, утерянные технологии.
+
+## Main Pillars
+- **Smart Diplomacy System** — переговоры, психологические профили, блеф, подкуп, баланс интересов.
+- **Alliance Grid** — управление внутренним напряжением альянса и риском раскола.
+- **Dynamic Guerrilla War Map** — координация атак в обычном космосе, гипере и теневых зонах.
+- **Text Quest Legacy** — большие ветвящиеся квесты, как в классических КР.
+- **Solo + Online split** — сюжетная кампания отдельно, галактическая сеть отдельно.
+
+## Modes
+### 1. Solo Campaign
+Сюжетное, оффлайн или псевдо-оффлайн прохождение:
+- глубокий лор
+- дипломатия и сюжетные развилки
+- поиск Келлера
+- сбор альянса
+- война против Махпелл
+
+### 2. Galactic Network (Online)
+Онлайн-режим для долгой жизни проекта:
+- PvE спецоперации
+- PvP гипер-арены
+- кланы и базы
+- живой рынок
+- кооперативные рейды в чёрные дыры
 
 ## Stack
-- **Godot 4** for game client
-- **GitHub** for repo, docs, CI, and iteration
-- **Manus AI** for external testing / validation loop
+- **Godot 4** — клиент / core gameplay prototype
+- **GitHub** — repo, docs, iteration, workflows
+- **Manus AI** — external testing / edge-case hunting
+- **ClawX / OpenClaw** — optional AI assistant layer for bots, balancing, and system design
+- **Blender** — visual pipeline later
 
-## Repository structure
-- `docs/` — design docs, lore, roadmap
+## Repository Structure
+- `docs/` — game design, lore, systems, roadmap
 - `game/` — Godot project
-- `data/` — JSON/YAML data for factions, systems, economy
-- `quests/` — quest definitions and story content
-- `.github/workflows/` — CI for validation/builds later
+- `data/` — structured data for factions, systems, economy
+- `quests/` — story quests and encounter definitions
 
-## Current status
-Scaffold initialized. Next step: pour in the core story, factions, and quest schema.
+## Current Focus
+1. зафиксировать лор и основную арку
+2. описать Smart Diplomacy System
+3. определить MVP для соло-кампании
+4. подготовить foundations для online-режима без расползания scope
