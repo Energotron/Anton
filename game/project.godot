@@ -1,0 +1,9 @@
+; Engine configuration file.
+; Minimal Godot 4 project placeholder.
+
+config_version=5
+
+[application]
+config/name="KR3 Prototype"
+run/main_scene=""
+config/features=PackedStringArray("4.2")
