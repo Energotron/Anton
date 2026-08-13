@@ -1,0 +1,10 @@
+{
+  "deterministic": true,
+  "attitude_range": [-100, 100],
+  "modifiers": {
+    "trade": 5,
+    "aid": 15,
+    "threat": -20,
+    "attack": -50
+  }
+}
