@@ -1,9 +1,6 @@
 name: Integrate SR3 WebGL Build
 
-on:
-  push:
-    branches: [master]
-  workflow_dispatch:
+on: [push, workflow_dispatch]
 
 permissions:
   contents: write
@@ -12,51 +9,26 @@ jobs:
   integrate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Check whether WebGL source is already integrated
-        id: check
+      - uses: actions/checkout@v4
+      - name: Import WebGL archive
+        env:
+          SR3_WEBGL_URL: https://www.dropbox.com/pri/get/sr3-webgl.zip?_subject_uid=1096373025&w=AAAkaQ5e6s1QkAHgdsdu5huPndBJFVN5bvm4vE8YJLvCeg
         run: |
           if [ -f game/webgl/src/main.js ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo 'WebGL already integrated; nothing to do.'
+            exit 0
           fi
-
-      - name: Download reference WebGL archive
-        if: steps.check.outputs.present == 'false'
-        env:
-          SR3_WEBGL_URL: 'https://www.dropbox.com/pri/get/sr3-webgl.zip?_subject_uid=1096373025&w=AAAkaQ5e6s1QkAHgdsdu5huPndBJFVN5bvm4vE8YJLvCeg'
-        run: |
           curl -fL "$SR3_WEBGL_URL" -o /tmp/sr3-webgl.zip
           unzip -q /tmp/sr3-webgl.zip -d /tmp/sr3-webgl
-
-      - name: Integrate source and runtime build
-        if: steps.check.outputs.present == 'false'
-        run: |
           rm -rf game/webgl
           mkdir -p game/webgl
           cp -R /tmp/sr3-webgl/sr3-webgl/. game/webgl/
-          rm -rf game/webgl/node_modules
+          rm -rf game/webgl/node_modules game/webgl/sr3-extracted
           rm -f game/webgl/space-rangers-3-webgl.zip
-          rm -rf game/webgl/sr3-extracted
-
-          cat > game/webgl/INTEGRATION.md <<'DOC'
-# SR3 WebGL integration
-
-This directory contains the WebGL implementation imported from the `sr3-webgl.zip` reference build.
-
-The repository's existing Godot prototype remains under `game/`; the WebGL implementation is kept as a parallel runtime so agents can iterate on browser gameplay without replacing the Godot foundation.
-
-Repository design systems remain authoritative in `docs/` and `diplomacy_rules.json`. When a WebGL system is extended, preserve the existing Smart Diplomacy / Z-Mechanic / narrative boundaries described there.
-DOC
-
-      - name: Commit integrated WebGL tree
-        if: steps.check.outputs.present == 'false'
-        run: |
+          printf '%s\n' '# SR3 WebGL integration' '' 'Imported from the sr3-webgl reference build. The existing Godot prototype under game/ remains intact.' '' 'See docs/WEBGL_INTEGRATION.md for architecture boundaries.' > game/webgl/INTEGRATION.md
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add game/webgl
-          git commit -m 'feat: integrate SR3 WebGL source and runtime build'
+          git diff --cached --quiet && exit 0
+          git commit -m 'feat: import SR3 WebGL source and runtime build'
           git push
