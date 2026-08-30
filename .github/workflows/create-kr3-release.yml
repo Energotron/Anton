@@ -1,48 +1,163 @@
-name: Build & Publish KR3 Release
+name: Agent Release Promotion
 
 on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/release-decision.json'
+      - 'game/webgl/**'
+      - 'docs/ROADMAP.md'
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag, e.g. v0.4.0-alpha'
-        required: true
-        default: 'v0.3.9-alpha'
-      title:
-        description: 'Release title'
-        required: true
-        default: 'Space Rangers 3: Children of Eltan'
+
+concurrency:
+  group: kr3-release-promotion
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  evaluate:
+    name: Evaluate agent release decision
     runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.intent.outputs.release }}
+      tag: ${{ steps.intent.outputs.tag }}
     steps:
       - name: Checkout master
         uses: actions/checkout@v4
         with:
           ref: master
+          fetch-depth: 0
+
+      - name: Validate release intent
+        id: intent
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, re
+          from pathlib import Path
+
+          p = Path('.github/release-decision.json')
+          data = json.loads(p.read_text(encoding='utf-8'))
+          required = {'release', 'tag', 'title', 'prerelease', 'reason', 'notes'}
+          missing = required - data.keys()
+          if missing:
+              raise SystemExit(f'missing release-decision keys: {sorted(missing)}')
+          if not isinstance(data['release'], bool):
+              raise SystemExit('release must be boolean')
+          if not isinstance(data['prerelease'], bool):
+              raise SystemExit('prerelease must be boolean')
+          if not isinstance(data['notes'], list) or not all(isinstance(x, str) for x in data['notes']):
+              raise SystemExit('notes must be an array of strings')
+          if data['release']:
+              if not re.fullmatch(r'v\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?', data['tag']):
+                  raise SystemExit(f"invalid release tag: {data['tag']!r}")
+              if not str(data['title']).strip():
+                  raise SystemExit('title is required for a release')
+              if len(str(data['reason']).strip()) < 12:
+                  raise SystemExit('release reason is too short; agent must justify promotion')
+          PY
+
+          RELEASE=$(python3 -c "import json; print(str(json.load(open('.github/release-decision.json'))['release']).lower())")
+          TAG=$(python3 -c "import json; print(json.load(open('.github/release-decision.json'))['tag'])")
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Explain no-release decision
+        if: steps.intent.outputs.release != 'true'
+        run: echo 'Agent decided the current master is not release-ready. No release will be created.'
+
+  promote:
+    name: Verify and publish agent-approved release
+    needs: evaluate
+    if: needs.evaluate.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact master revision
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
+      - name: Guard against duplicate or empty promotion
+        id: guard
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.evaluate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; promotion is idempotent."
+            echo 'skip=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          LATEST=$(gh release list --limit 1 --json tagName --jq '.[0].tagName // ""')
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          echo 'skip=false' >> "$GITHUB_OUTPUT"
+
+          if [ -n "$LATEST" ] && git rev-parse "$LATEST^{commit}" >/dev/null 2>&1; then
+            COUNT=$(git rev-list --count "$LATEST..HEAD")
+            echo "Commits since $LATEST: $COUNT"
+            test "$COUNT" -ge 1
+            git diff --name-only "$LATEST..HEAD" > /tmp/release-changes.txt
+          else
+            git ls-files > /tmp/release-changes.txt
+          fi
+
+          if ! grep -Eq '^game/webgl/(index\.html|js/|css/|public/|manifest\.json|package\.json|music/)' /tmp/release-changes.txt; then
+            echo 'Agent requested a release, but no playable WebGL runtime files changed since the latest release.' >&2
+            exit 1
+          fi
+
       - name: Install WebGL dependencies
+        if: steps.guard.outputs.skip != 'true'
         run: npm install --prefix game/webgl --no-audit --no-fund --package-lock=false
 
       - name: Run gameplay tests
+        if: steps.guard.outputs.skip != 'true'
         run: npm test --prefix game/webgl
 
+      - name: Check runtime JavaScript syntax
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            node --check "$file"
+          done < <(find game/webgl/js game/webgl/src -type f -name '*.js' -print0)
+
       - name: Build production WebGL bundle
+        if: steps.guard.outputs.skip != 'true'
         run: npm run build --prefix game/webgl
 
+      - name: Verify canonical runtime payload
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s game/webgl/index.html
+          test -s game/webgl/js/main.js
+          test -s game/webgl/js/WebGLRenderer.js
+          test -s game/webgl/js/assets.js
+          for track in flight fighter human gaal fei quasar peleng maloc; do
+            test -s "game/webgl/music/${track}.mp3"
+          done
+
       - name: Package verified WebGL game
+        if: steps.guard.outputs.skip != 'true'
         id: package
         shell: bash
         env:
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ needs.evaluate.outputs.tag }}
         run: |
           set -euo pipefail
           SAFE_TAG="${TAG//\//-}"
@@ -52,22 +167,47 @@ jobs:
                'game/webgl/test/*' \
                'game/webgl/src/*'
           unzip -tq "$ARCHIVE"
+          sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
           echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
 
-      - name: Create or update GitHub Release
+      - name: Build agent-authored release notes
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash
+        env:
+          LATEST: ${{ steps.guard.outputs.latest }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+
+          data = json.loads(Path('.github/release-decision.json').read_text(encoding='utf-8'))
+          lines = [f"## {data['reason'].strip()}", '']
+          notes = [x.strip() for x in data['notes'] if x.strip()]
+          if notes:
+              lines += ['### Agent-selected highlights'] + [f'- {x}' for x in notes] + ['']
+          latest = os.environ.get('LATEST', '').strip()
+          if latest:
+              log = subprocess.check_output(['git', 'log', '--pretty=- %s', f'{latest}..HEAD'], text=True).strip()
+              if log:
+                  lines += ['### Commits since previous release', log, '']
+          lines += [f"Build commit: `{subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()}`"]
+          Path('/tmp/release-notes.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+
+      - name: Publish new GitHub Release
+        if: steps.guard.outputs.skip != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
-          TITLE: ${{ inputs.title }}
+          TAG: ${{ needs.evaluate.outputs.tag }}
           ARCHIVE: ${{ steps.package.outputs.archive }}
         run: |
           set -euo pipefail
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$ARCHIVE" --clobber
-          else
-            gh release create "$TAG" "$ARCHIVE" \
-              --target master \
-              --title "$TITLE $TAG" \
-              --generate-notes
+          TITLE=$(python3 -c "import json; print(json.load(open('.github/release-decision.json'))['title'])")
+          PRERELEASE=$(python3 -c "import json; print(str(json.load(open('.github/release-decision.json'))['prerelease']).lower())")
+          ARGS=(release create "$TAG" "$ARCHIVE" "$ARCHIVE.sha256" --target "$GITHUB_SHA" --title "$TITLE $TAG" --notes-file /tmp/release-notes.md)
+          if [ "$PRERELEASE" = 'true' ]; then
+            ARGS+=(--prerelease)
           fi
+          gh "${ARGS[@]}"
