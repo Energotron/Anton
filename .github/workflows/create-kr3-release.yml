@@ -1,0 +1,33 @@
+name: Create KR3 v0.3.9 Alpha Release
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/create-kr3-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create release if missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v0.3.9-alpha >/dev/null 2>&1; then
+            echo 'Release v0.3.9-alpha already exists.'
+            exit 0
+          fi
+          gh release create v0.3.9-alpha \
+            --target master \
+            --title 'Space Rangers 3: Children of Eltan v0.3.9 Alpha' \
+            --notes 'Alpha WebGL build. The distributable archive is split into three volumes (z01, z02, zip) for upload-size compatibility. Place all three volumes in one folder and open the .zip volume with 7-Zip or WinRAR.'
