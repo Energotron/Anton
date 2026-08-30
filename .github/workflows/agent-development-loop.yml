@@ -1,0 +1,44 @@
+name: agent-development-loop
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - "agent/**"
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  sanity-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show top-level structure
+        run: |
+          echo "== Repository files =="
+          find . -maxdepth 2 -type f | sort | sed 's#^./##' | head -200
+
+      - name: Validate core docs
+        run: |
+          test -f README.md
+          test -f docs/AGENT_DEVELOPMENT_LOOP.md
+          test -f docs/PROJECT_CONSTITUTION.md
+          echo "Core docs are present."
+
+      - name: Check Godot scaffold
+        run: |
+          if [ -f game/project.godot ]; then
+            echo "Godot project found."
+          else
+            echo "No Godot project yet; WebGL/runtime-first stage is fine."
+          fi
+
+      - name: Agent-ready note
+        run: |
+          echo "Repository is ready for the next agentic iteration."

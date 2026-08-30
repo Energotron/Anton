@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "attitude_range": [-100, 100],
+  "actions": {
+    "trade": 5,
+    "aid": 10,
+    "threat": -15,
+    "attack": -40
+  },
+  "clamp_result": true,
+  "deterministic": true
+}

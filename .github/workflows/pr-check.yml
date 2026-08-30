@@ -1,0 +1,29 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  structure:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate project structure
+        run: |
+          test -f README.md
+          test -f docs/AGENT_DEVELOPMENT_LOOP.md
+          test -f docs/PROJECT_CONSTITUTION.md
+          test -f data/diplomacy_rules.json
+          test -f game/README.md
+          python - <<'PY'
+          import json
+          with open('data/diplomacy_rules.json', encoding='utf-8') as f:
+              data = json.load(f)
+          assert data['deterministic'] is True
+          assert data['attitude_range'] == [-100, 100]
+          print('Diplomacy data is valid.')
+          PY

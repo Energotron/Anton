@@ -1,5 +1,7 @@
 # Космические Рейнджеры 3: Дети Эльтана
 
+> **Каноническая ветка: `master`.** Фундаментальная конституция проекта: [`docs/PROJECT_CONSTITUTION.md`](docs/PROJECT_CONSTITUTION.md).
+
 Настоящий KR3-концепт: мрачная, сюжетная, системная космическая RPG/strategy sandbox в духе **Space Rangers**, но с упором на **Умную Дипломатию**, войну в нескольких измерениях и объединение несовместимых рас.
 
 ## High Concept
@@ -41,7 +43,7 @@
 - **GitHub** — repo, docs, iteration, workflows
 - **Manus AI** — external testing / edge-case hunting
 - **ClawX / OpenClaw** — optional AI assistant layer for bots, balancing, and system design
-- **Blender** — visual pipeline later
+- **Blender 5.0** — visual pipeline / asset production
 
 ## Repository Structure
 - `docs/` — game design, lore, systems, roadmap
@@ -69,3 +71,4 @@
 3. определить MVP для соло-кампании
 4. подготовить foundations для online-режима без расползания scope
 5. интегрировать и развивать WebGL build без разрушения Godot foundation
+6. держать `master` единой канонической веткой для agent-разработки
