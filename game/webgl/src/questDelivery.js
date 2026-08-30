@@ -1,6 +1,7 @@
 export const DELIVERY_XP = 12;
 export const DELIVERY_REPUTATION = 2;
 export const DELIVERY_EXPIRED_REPUTATION = -1;
+export const DELIVERY_ABANDONED_REPUTATION = -1;
 export const DELIVERY_MIN_REPUTATION = -10;
 
 function nonNegativeInt(value) {
@@ -80,6 +81,31 @@ export function acceptDelivery(offer, { day = 0, systemId = 0, planetIdx = -1 } 
     acceptedDay: nonNegativeInt(day),
     originSys: nonNegativeInt(systemId),
     originPl: Number.isInteger(planetIdx) ? planetIdx : -1,
+  };
+}
+
+export function abandonDelivery({ quest = null, reputation = {} } = {}) {
+  const nextReputation = { ...reputation };
+  if (!quest) {
+    return {
+      status: 'none',
+      quest: null,
+      reputation: nextReputation,
+      reputationDelta: 0,
+    };
+  }
+
+  const reputationAfterAbandon = applyReputationDelta(
+    nextReputation,
+    quest,
+    DELIVERY_ABANDONED_REPUTATION,
+  );
+
+  return {
+    status: 'abandoned',
+    quest: null,
+    reputation: reputationAfterAbandon,
+    reputationDelta: reputationFaction(quest) ? DELIVERY_ABANDONED_REPUTATION : 0,
   };
 }
 
