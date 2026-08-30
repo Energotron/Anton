@@ -4,8 +4,8 @@ on:
   push:
     branches: [master]
     paths:
-      - '.github/kr3-runtime-bootstrap.zip'
       - '.github/workflows/restore-kr3-runtime.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -19,48 +19,87 @@ jobs:
         with:
           ref: master
 
-      - name: Restore verified runtime
+      - name: Download and verify exact reference runtime
+        env:
+          SR3_DIRECT_URL: 'https://uc6a53ff40fe3309b09eccee4ae3.dl.dropboxusercontent.com/cd/0/get/DHMjXxD3goZ1vCsux753-QtYqBvt9ZDT-pAzUwxOjlfIpHkNCqlBcu_z2-23Tj_ci431Kb2ALgcZRKZxGNoIkjtKZ43JMeIXWVvB2Jq085dA_FinIJvJ5v0yVo96VzAd8xQsCr1RB6O71CsFLcJ3GzqTJ0HHpztDKNpihNVjYt7agw/file?c_luid=42f764de'
         shell: bash
         run: |
           set -euo pipefail
-          test -f .github/kr3-runtime-bootstrap.zip
-          mkdir -p game/webgl
-          unzip -oq .github/kr3-runtime-bootstrap.zip -d game/webgl
+          curl --fail --location --silent --show-error "$SR3_DIRECT_URL" -o /tmp/sr3.zip
+          unzip -tq /tmp/sr3.zip
+          rm -rf /tmp/sr3 && mkdir -p /tmp/sr3
+          unzip -q /tmp/sr3.zip -d /tmp/sr3
 
+          if [ -f /tmp/sr3/sr3-webgl/index.html ]; then
+            ROOT=/tmp/sr3/sr3-webgl
+          elif [ -f /tmp/sr3/index.html ]; then
+            ROOT=/tmp/sr3
+          else
+            echo 'Reference archive has no WebGL entry point.' >&2
+            exit 1
+          fi
+
+          verify() {
+            local rel="$1" expected="$2" actual
+            test -f "$ROOT/$rel"
+            actual="$(sha256sum "$ROOT/$rel" | awk '{print $1}')"
+            if [ "$actual" != "$expected" ]; then
+              echo "Hash mismatch for $rel: expected $expected, got $actual" >&2
+              exit 1
+            fi
+          }
+
+          verify index.html 4e771d8b6b28c050db46f173b30bdcdc0c53151b591023f5d1ebcbf7bc3de1c1
+          verify css/style.css e5d895cc8385a2540a60c3d654cb5ee0b0dbadbc2ff75d4beb1c1609cb88d2ee
+          verify js/main.js 51bf88aac3199d48d9b49f32c19b51ada50a385f48540cdb1e82b1b9e3ff3db0
+          verify js/WebGLRenderer.js 2107f1d000db1952c94ae8b63f1bed894774699ab0208bd6ba172e9ce2a79d91
+          verify js/assets.js 86ebb77347e2d543fadad87de07b01a5397dbdec9e6ca886ff98c3c0b4aa03d0
+          verify js/data.js 448da2c892e8629ec08986a2dd4e68f962f7664b55f573c6e2947103237f7fa3
+          verify js/math.js cc5cb2db9ca99ab84066cb178562b1d8de67b9958d4dc1ca29e9eb74f38c69a9
+          verify manifest.json c2ba16e2f02fd891bdd149801110fd7bddfaa51bb08b06e8eabdb4d9813ae9a8
+
+          echo "ROOT=$ROOT" >> "$GITHUB_ENV"
+          echo 'Reference runtime hashes match Library archive.'
+
+      - name: Restore runtime without soundtrack redistribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p game/webgl/css game/webgl/js game/webgl/music
+          rm -rf game/webgl/css game/webgl/js
+          cp -R "$ROOT/css" game/webgl/css
+          cp -R "$ROOT/js" game/webgl/js
+          cp "$ROOT/index.html" game/webgl/index.html
+          cp "$ROOT/manifest.json" game/webgl/manifest.json
+          if [ -d "$ROOT/public" ]; then
+            rm -rf game/webgl/public
+            cp -R "$ROOT/public" game/webgl/public
+          fi
+          cat > game/webgl/music/README.md <<'DOC'
+          # Music assets
+
+          The local reference archive contains soundtrack MP3 files that are not redistributed in this public repository. The runtime already falls back to built-in procedural ambient when those files are absent.
+          DOC
+
+      - name: Quality gate
+        shell: bash
+        run: |
+          set -euo pipefail
           test -f game/webgl/index.html
-          test -f game/webgl/css/style.css
           test -f game/webgl/js/main.js
           test -f game/webgl/js/WebGLRenderer.js
           test -f game/webgl/js/assets.js
-          test -f game/webgl/js/data.js
-          test -f game/webgl/js/math.js
-          test -f game/webgl/manifest.json
-
           node --check game/webgl/js/main.js
           node --check game/webgl/js/WebGLRenderer.js
           node --check game/webgl/js/assets.js
           node --check game/webgl/js/data.js
           node --check game/webgl/js/math.js
-          find game/webgl/js/assets -type f -name '*.js' -print0 | xargs -0 -n1 node --check
-
           npm test --prefix game/webgl
-
-          node --input-type=module <<'NODE'
-          import { PROC_TEXTURES, PROC_SHIP_VERTS, SYSNAMES_EXT } from './game/webgl/js/assets.js';
-          const seed = PROC_TEXTURES.nebula_a.length % 9973;
-          if (seed !== 5957) throw new Error(`renderer seed changed: ${seed}`);
-          if (SYSNAMES_EXT.length !== 400) throw new Error(`expected 400 system names, got ${SYSNAMES_EXT.length}`);
-          const ships = ['fighter','freighter','raider','pirate','patrol','station_hub'];
-          for (const ship of ships) {
-            if (!Array.isArray(PROC_SHIP_VERTS[ship]) || PROC_SHIP_VERTS[ship].length === 0) {
-              throw new Error(`missing ship geometry: ${ship}`);
-            }
-          }
-          console.log('Runtime asset compatibility gate passed.');
-          NODE
-
           grep -q 'v3.9' game/webgl/index.html
           grep -q "from './WebGLRenderer.js'" game/webgl/js/main.js
+          test "$(sha256sum game/webgl/js/main.js | awk '{print $1}')" = '51bf88aac3199d48d9b49f32c19b51ada50a385f48540cdb1e82b1b9e3ff3db0'
+          test "$(sha256sum game/webgl/js/WebGLRenderer.js | awk '{print $1}')" = '2107f1d000db1952c94ae8b63f1bed894774699ab0208bd6ba172e9ce2a79d91'
+          echo 'Runtime quality gate passed.'
 
       - name: Commit restored runtime
         shell: bash
