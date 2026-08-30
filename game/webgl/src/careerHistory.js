@@ -1,4 +1,6 @@
 export const SAVE_KEY = 'kr3_save_slot0';
+export const CAREER_HISTORY_KEY = 'kr3_career_history';
+export const CAREER_HISTORY_LIMIT = 40;
 
 function finiteNumber(value, fallback = 0) {
   const n = Number(value);
@@ -36,6 +38,41 @@ export function readCareer(storage = globalThis?.localStorage) {
   }
 }
 
+function historySignature(snapshot) {
+  if (!snapshot) return '';
+  return JSON.stringify([
+    snapshot.date, snapshot.turn, snapshot.system, snapshot.money,
+    snapshot.kills, snapshot.xp, snapshot.visited, snapshot.totalSystems,
+    snapshot.reputation || {},
+  ]);
+}
+
+export function readCareerHistory(storage = globalThis?.localStorage) {
+  if (!storage || typeof storage.getItem !== 'function') return [];
+  try {
+    const raw = storage.getItem(CAREER_HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter(Boolean).slice(-CAREER_HISTORY_LIMIT) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function recordCareerSnapshot(storage = globalThis?.localStorage, snapshot = readCareer(storage)) {
+  if (!snapshot || !storage || typeof storage.setItem !== 'function') return false;
+  const history = readCareerHistory(storage);
+  const signature = historySignature(snapshot);
+  if (history.length && historySignature(history[history.length - 1]) === signature) return false;
+  history.push(snapshot);
+  const trimmed = history.slice(-CAREER_HISTORY_LIMIT);
+  try {
+    storage.setItem(CAREER_HISTORY_KEY, JSON.stringify(trimmed));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function formatCareer(snapshot, factionNames = {}) {
   if (!snapshot) return 'Сохранённая карьера пока не найдена.';
   const repEntries = Object.entries(snapshot.reputation || {});
@@ -50,15 +87,25 @@ export function formatCareer(snapshot, factionNames = {}) {
   ].join('\n');
 }
 
+export function formatCareerTimeline(history = []) {
+  if (!history.length) return 'История появится после следующих сохранений.';
+  return history.slice(-8).reverse().map(snapshot =>
+    `${snapshot.date} · ход ${snapshot.turn} · ${snapshot.system} · XP ${snapshot.xp} · побед ${snapshot.kills}`
+  ).join('\n');
+}
+
 function showCareerModal() {
   const panel = document.getElementById('panel');
   if (!panel) return;
   const snapshot = readCareer();
+  recordCareerSnapshot(globalThis?.localStorage, snapshot);
+  const history = readCareerHistory();
   const text = formatCareer(snapshot, {
     fed: 'Федерация Терра', mal: 'Малоки', pel: 'Пеленгская Лига',
     kla: 'Клиссаны', pir: 'Пираты Вольницы',
   });
-  panel.innerHTML = `<div class="pbox"><h2>📜 Карьера рейнджера</h2><div class="evTxt" style="white-space:pre-line">${text}</div><div class="prow"><button class="btn ghost" id="careerClose">Закрыть</button></div></div>`;
+  const timeline = formatCareerTimeline(history);
+  panel.innerHTML = `<div class="pbox"><h2>📜 Карьера рейнджера</h2><div class="evTxt" style="white-space:pre-line">${text}</div><h3>Последние вехи</h3><div class="evTxt" style="white-space:pre-line">${timeline}</div><div class="prow"><button class="btn ghost" id="careerClose">Закрыть</button></div></div>`;
   panel.classList.remove('hidden');
   document.getElementById('careerClose')?.addEventListener('click', () => {
     panel.classList.add('hidden');
@@ -80,10 +127,28 @@ export function installCareerHistoryButton(doc = globalThis?.document) {
   return true;
 }
 
+export function installCareerRecorder(win = globalThis?.window, storage = globalThis?.localStorage) {
+  if (!win || !storage || win.__kr3CareerRecorderInstalled) return false;
+  const capture = () => recordCareerSnapshot(storage);
+  win.__kr3CareerRecorderInstalled = true;
+  win.addEventListener?.('pagehide', capture);
+  win.addEventListener?.('beforeunload', capture);
+  win.document?.addEventListener?.('visibilitychange', () => {
+    if (win.document.visibilityState === 'hidden') capture();
+  });
+  win.setInterval?.(capture, 15000);
+  capture();
+  return true;
+}
+
 if (typeof document !== 'undefined') {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => installCareerHistoryButton(document), { once: true });
-  } else {
+  const boot = () => {
     installCareerHistoryButton(document);
+    installCareerRecorder(window, localStorage);
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
   }
 }
