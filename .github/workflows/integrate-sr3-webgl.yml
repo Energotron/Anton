@@ -1,37 +1,33 @@
-name: Integrate SR3 WebGL Build
+name: Validate SR3 WebGL
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches:
+      - master
+      - agent/kr3-dev
+    paths:
+      - 'game/webgl/**'
+      - '.github/workflows/integrate-sr3-webgl.yml'
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  integrate:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Import WebGL archive
-        env:
-          SR3_WEBGL_URL: https://www.dropbox.com/pri/get/sr3-webgl.zip?_subject_uid=1096373025&w=AAAkaQ5e6s1QkAHgdsdu5huPndBJFVN5bvm4vE8YJLvCeg
+      - name: Run quest system tests
+        run: npm test --prefix game/webgl
+      - name: Check JavaScript syntax
+        shell: bash
         run: |
-          # Support both the historical normalized layout and the current
-          # reference archive layout. Once either entry point exists, never
-          # re-import the archive over active development work.
-          if [ -f game/webgl/src/main.js ] || [ -f game/webgl/js/main.js ]; then
-            echo 'WebGL already integrated; preserving current development tree.'
-            exit 0
-          fi
-          curl -fL "$SR3_WEBGL_URL" -o /tmp/sr3-webgl.zip
-          unzip -q /tmp/sr3-webgl.zip -d /tmp/sr3-webgl
-          rm -rf game/webgl
-          mkdir -p game/webgl
-          cp -R /tmp/sr3-webgl/sr3-webgl/. game/webgl/
-          rm -rf game/webgl/node_modules game/webgl/sr3-extracted
-          rm -f game/webgl/space-rangers-3-webgl.zip
-          printf '%s\n' '# SR3 WebGL integration' '' 'Imported from the sr3-webgl reference build. The existing Godot prototype under game/ remains intact.' '' 'See docs/WEBGL_INTEGRATION.md for architecture boundaries.' > game/webgl/INTEGRATION.md
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add game/webgl
-          git diff --cached --quiet && exit 0
-          git commit -m 'feat: import SR3 WebGL source and runtime build'
-          git push
+          files=()
+          while IFS= read -r -d '' file; do files+=("$file"); done < <(
+            find game/webgl/src game/webgl/js -type f -name '*.js' -print0 2>/dev/null || true
+          )
+          for file in "${files[@]}"; do
+            node --check "$file"
+          done
+          echo "Validated ${#files[@]} JavaScript source files."
