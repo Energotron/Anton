@@ -8,6 +8,7 @@ test('active delivery exposes remaining time and mission details', () => {
   assert.deepEqual(deliveryQuestPresentation({ quest: QUEST, day: 10 }), {
     status: 'active', daysLeft: 4, dueToday: false, expired: false,
     destination: { systemId: 7, planetIdx: 2 }, cargo: { good: 'food', quantity: 5 }, reward: 900,
+    reputation: null,
   });
 });
 
