@@ -50,11 +50,13 @@ export function deliveryQuestPresentation({ quest = null, day = 0 } = {}) {
       destination: null,
       cargo: null,
       reward: 0,
+      reputation: null,
     };
   }
 
   const expired = isQuestExpired(quest, day);
   const daysLeft = questDaysLeft(quest, day);
+  const faction = reputationFaction(quest);
   return {
     status: expired ? 'expired' : 'active',
     daysLeft,
@@ -69,6 +71,11 @@ export function deliveryQuestPresentation({ quest = null, day = 0 } = {}) {
       quantity: nonNegativeInt(quest.q),
     },
     reward: Number(quest.pay || 0),
+    reputation: faction ? {
+      faction,
+      completionDelta: DELIVERY_REPUTATION,
+      failureDelta: DELIVERY_EXPIRED_REPUTATION,
+    } : null,
   };
 }
 
