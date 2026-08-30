@@ -40,6 +40,38 @@ export function isQuestExpired(quest, day) {
   return Boolean(quest) && nonNegativeInt(day) > nonNegativeInt(quest.deadline);
 }
 
+export function deliveryQuestPresentation({ quest = null, day = 0 } = {}) {
+  if (!quest) {
+    return {
+      status: 'none',
+      daysLeft: 0,
+      dueToday: false,
+      expired: false,
+      destination: null,
+      cargo: null,
+      reward: 0,
+    };
+  }
+
+  const expired = isQuestExpired(quest, day);
+  const daysLeft = questDaysLeft(quest, day);
+  return {
+    status: expired ? 'expired' : 'active',
+    daysLeft,
+    dueToday: !expired && daysLeft === 0,
+    expired,
+    destination: {
+      systemId: nonNegativeInt(quest.sys),
+      planetIdx: Number.isInteger(quest.pl) ? quest.pl : -1,
+    },
+    cargo: {
+      good: quest.g ?? null,
+      quantity: nonNegativeInt(quest.q),
+    },
+    reward: Number(quest.pay || 0),
+  };
+}
+
 export function canAcceptDelivery({
   activeQuest = null,
   cargo = {},
