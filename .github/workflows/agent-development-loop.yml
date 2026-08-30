@@ -1,44 +1,46 @@
-name: agent-development-loop
+name: Agent Development Gate
 
 on:
   workflow_dispatch:
   push:
     branches:
       - master
-      - "agent/**"
+      - 'agent/**'
   pull_request:
     branches:
       - master
 
+permissions:
+  contents: read
+
 jobs:
-  sanity-check:
+  readiness:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show top-level structure
+      - name: Validate agent context
+        shell: bash
         run: |
-          echo "== Repository files =="
-          find . -maxdepth 2 -type f | sort | sed 's#^./##' | head -200
-
-      - name: Validate core docs
-        run: |
+          set -euo pipefail
           test -f README.md
           test -f docs/AGENT_DEVELOPMENT_LOOP.md
           test -f docs/PROJECT_CONSTITUTION.md
-          echo "Core docs are present."
+          test -f docs/ROADMAP.md
+          test -f docs/GDD.md
+          test -f docs/LORE.md
+          test -f game/webgl/index.html
+          test -f game/webgl/js/main.js
+          test -f game/webgl/package.json
+          test -d game/webgl/src
+          test -d game/webgl/test
 
-      - name: Check Godot scaffold
+      - name: Validate roadmap and data JSON
+        shell: bash
         run: |
-          if [ -f game/project.godot ]; then
-            echo "Godot project found."
-          else
-            echo "No Godot project yet; WebGL/runtime-first stage is fine."
-          fi
-
-      - name: Agent-ready note
-        run: |
-          echo "Repository is ready for the next agentic iteration."
+          set -euo pipefail
+          python3 -m json.tool data/diplomacy_rules.json >/dev/null
+          python3 -m json.tool game/webgl/manifest.json >/dev/null
+          node -e "const p=require('./game/webgl/package.json'); if(!p.scripts?.test || !p.scripts?.build) process.exit(1)"
+          echo 'Repository is ready for a full-runtime agent iteration.'
