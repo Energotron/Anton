@@ -1,6 +1,7 @@
 export const DELIVERY_XP = 12;
 export const DELIVERY_REPUTATION = 2;
 export const DELIVERY_EXPIRED_REPUTATION = -1;
+export const DELIVERY_MIN_REPUTATION = -10;
 
 function nonNegativeInt(value) {
   return Math.max(0, Math.floor(Number(value) || 0));
@@ -8,6 +9,11 @@ function nonNegativeInt(value) {
 
 function reputationFaction(quest) {
   return quest?.issuerFaction || quest?.faction || null;
+}
+
+function reputationScore(reputation = {}, quest = null) {
+  const faction = reputationFaction(quest);
+  return faction ? Number(reputation?.[faction] || 0) : 0;
 }
 
 function applyReputationDelta(reputation = {}, quest = null, delta = 0) {
@@ -33,9 +39,18 @@ export function isQuestExpired(quest, day) {
   return Boolean(quest) && nonNegativeInt(day) > nonNegativeInt(quest.deadline);
 }
 
-export function canAcceptDelivery({ activeQuest = null, cargo = {}, capacity = 0, offer = null } = {}) {
+export function canAcceptDelivery({
+  activeQuest = null,
+  cargo = {},
+  capacity = 0,
+  offer = null,
+  reputation = {},
+} = {}) {
   if (!offer) return { ok: false, reason: 'missing_offer' };
   if (activeQuest) return { ok: false, reason: 'active_quest' };
+  if (reputationFaction(offer) && reputationScore(reputation, offer) < DELIVERY_MIN_REPUTATION) {
+    return { ok: false, reason: 'reputation_too_low' };
+  }
   if (cargoUsed(cargo) + nonNegativeInt(offer.q) > nonNegativeInt(capacity)) {
     return { ok: false, reason: 'cargo_full' };
   }
@@ -88,8 +103,6 @@ export function resolveDeliveryAtDock({
     return { status: 'not_here', quest, cargo: nextCargo, money, xp, reputation: nextReputation };
   }
 
-  // Compatibility with pre-missionCargo saves: old builds placed quest goods
-  // directly in the market hold, so those goods must still be consumed.
   if (!quest.missionCargo) {
     const have = nonNegativeInt(nextCargo[quest.g]);
     const required = nonNegativeInt(quest.q);
