@@ -20,7 +20,7 @@ jobs:
 
       - name: Download and verify exact reference runtime
         env:
-          SR3_DIRECT_URL: 'https://uca504aaf7dbeaa977d7e9c4844b.dl.dropboxusercontent.com/cd/0/get/DHOdRTiU08hwalAdEMYtXOyWq_sX-2Z_Wa2Jybs-jAVIDB5-X37043xNozMyBfjAtpEq5Namvd7PFOWfjKvkEmeR1QwBjea0EGLr4Q4x9_tymj3QmTnQQGaPuA2HnGeEyMls71fVxi472rAPfXbAht6P9rASpvV6acKnFXMLS7FHiw/file?c_luid=42f764de'
+          SR3_DIRECT_URL: 'https://uce486417dc068cdfd2088fbd068.dl.dropboxusercontent.com/cd/0/get/DHM84h-tJ_thyF9MceT9zwJ6KbfusxSoUiK2VAC2ssWzgM5cdXq8dzFGHMfgbhBBEoUjxPqNRgAA3d7MPXwKlxr5r3KAMqKs7bpgDEtRHbx3t4UK02iDYkehl7dWSI98DU_Ec0Q4k7Cys49yMBLdjVDXP7fc37cXHNVOv-Vms12TBw/file?c_luid=42f764de'
         shell: bash
         run: |
           set -euo pipefail
