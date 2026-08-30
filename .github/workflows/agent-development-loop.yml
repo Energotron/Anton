@@ -35,12 +35,29 @@ jobs:
           test -f game/webgl/package.json
           test -d game/webgl/src
           test -d game/webgl/test
+          test -f .github/release-decision.json
 
-      - name: Validate roadmap and data JSON
+      - name: Validate roadmap, runtime and release intent
         shell: bash
         run: |
           set -euo pipefail
           python3 -m json.tool data/diplomacy_rules.json >/dev/null
           python3 -m json.tool game/webgl/manifest.json >/dev/null
           node -e "const p=require('./game/webgl/package.json'); if(!p.scripts?.test || !p.scripts?.build) process.exit(1)"
-          echo 'Repository is ready for a full-runtime agent iteration.'
+          python3 - <<'PY'
+          import json, re
+          data = json.load(open('.github/release-decision.json', encoding='utf-8'))
+          for key in ('release','tag','title','prerelease','reason','notes'):
+              if key not in data:
+                  raise SystemExit(f'missing release-decision key: {key}')
+          if not isinstance(data['release'], bool) or not isinstance(data['prerelease'], bool):
+              raise SystemExit('release/prerelease must be boolean')
+          if not isinstance(data['notes'], list):
+              raise SystemExit('notes must be an array')
+          if data['release']:
+              if not re.fullmatch(r'v\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?', data['tag']):
+                  raise SystemExit('invalid requested release tag')
+              if len(str(data['reason']).strip()) < 12:
+                  raise SystemExit('release=true requires a meaningful reason')
+          PY
+          echo 'Repository is ready for a full-runtime agent iteration and autonomous release decision.'
