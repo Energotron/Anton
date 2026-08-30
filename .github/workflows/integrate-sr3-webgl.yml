@@ -14,8 +14,11 @@ jobs:
         env:
           SR3_WEBGL_URL: https://www.dropbox.com/pri/get/sr3-webgl.zip?_subject_uid=1096373025&w=AAAkaQ5e6s1QkAHgdsdu5huPndBJFVN5bvm4vE8YJLvCeg
         run: |
-          if [ -f game/webgl/src/main.js ]; then
-            echo 'WebGL already integrated; nothing to do.'
+          # Support both the historical normalized layout and the current
+          # reference archive layout. Once either entry point exists, never
+          # re-import the archive over active development work.
+          if [ -f game/webgl/src/main.js ] || [ -f game/webgl/js/main.js ]; then
+            echo 'WebGL already integrated; preserving current development tree.'
             exit 0
           fi
           curl -fL "$SR3_WEBGL_URL" -o /tmp/sr3-webgl.zip
