@@ -1,5 +1,6 @@
 name: Restore KR3 WebGL Runtime
 
+# Trigger refresh: restore verified v3.9 runtime into master.
 on:
   push:
     branches: [master]
