@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - '.github/release-decision.json'
+      - '.github/workflows/create-kr3-release.yml'
       - 'game/webgl/**'
       - 'docs/ROADMAP.md'
   workflow_dispatch:
