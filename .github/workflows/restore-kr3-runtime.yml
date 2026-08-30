@@ -3,8 +3,7 @@ name: Restore KR3 WebGL Runtime
 on:
   push:
     branches: [master]
-    paths:
-      - '.github/workflows/restore-kr3-runtime.yml'
+    paths: ['.github/workflows/restore-kr3-runtime.yml']
   workflow_dispatch:
 
 permissions:
@@ -14,14 +13,13 @@ jobs:
   restore:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout master
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: master
 
       - name: Download and verify exact reference runtime
         env:
-          SR3_DIRECT_URL: 'https://uc6a53ff40fe3309b09eccee4ae3.dl.dropboxusercontent.com/cd/0/get/DHMjXxD3goZ1vCsux753-QtYqBvt9ZDT-pAzUwxOjlfIpHkNCqlBcu_z2-23Tj_ci431Kb2ALgcZRKZxGNoIkjtKZ43JMeIXWVvB2Jq085dA_FinIJvJ5v0yVo96VzAd8xQsCr1RB6O71CsFLcJ3GzqTJ0HHpztDKNpihNVjYt7agw/file?c_luid=42f764de'
+          SR3_DIRECT_URL: 'https://uca504aaf7dbeaa977d7e9c4844b.dl.dropboxusercontent.com/cd/0/get/DHOdRTiU08hwalAdEMYtXOyWq_sX-2Z_Wa2Jybs-jAVIDB5-X37043xNozMyBfjAtpEq5Namvd7PFOWfjKvkEmeR1QwBjea0EGLr4Q4x9_tymj3QmTnQQGaPuA2HnGeEyMls71fVxi472rAPfXbAht6P9rASpvV6acKnFXMLS7FHiw/file?c_luid=42f764de'
         shell: bash
         run: |
           set -euo pipefail
@@ -30,25 +28,21 @@ jobs:
           rm -rf /tmp/sr3 && mkdir -p /tmp/sr3
           unzip -q /tmp/sr3.zip -d /tmp/sr3
 
-          if [ -f /tmp/sr3/sr3-webgl/index.html ]; then
-            ROOT=/tmp/sr3/sr3-webgl
-          elif [ -f /tmp/sr3/index.html ]; then
-            ROOT=/tmp/sr3
-          else
-            echo 'Reference archive has no WebGL entry point.' >&2
-            exit 1
-          fi
+          ROOT=''
+          while IFS= read -r candidate; do
+            if [ "$(sha256sum "$candidate" | awk '{print $1}')" = '51bf88aac3199d48d9b49f32c19b51ada50a385f48540cdb1e82b1b9e3ff3db0' ]; then
+              ROOT="${candidate%/js/main.js}"
+              break
+            fi
+          done < <(find /tmp/sr3 -type f -path '*/js/main.js' -print)
+          test -n "$ROOT"
 
           verify() {
             local rel="$1" expected="$2" actual
             test -f "$ROOT/$rel"
             actual="$(sha256sum "$ROOT/$rel" | awk '{print $1}')"
-            if [ "$actual" != "$expected" ]; then
-              echo "Hash mismatch for $rel: expected $expected, got $actual" >&2
-              exit 1
-            fi
+            test "$actual" = "$expected" || { echo "Hash mismatch for $rel" >&2; exit 1; }
           }
-
           verify index.html 4e771d8b6b28c050db46f173b30bdcdc0c53151b591023f5d1ebcbf7bc3de1c1
           verify css/style.css e5d895cc8385a2540a60c3d654cb5ee0b0dbadbc2ff75d4beb1c1609cb88d2ee
           verify js/main.js 51bf88aac3199d48d9b49f32c19b51ada50a385f48540cdb1e82b1b9e3ff3db0
@@ -57,38 +51,30 @@ jobs:
           verify js/data.js 448da2c892e8629ec08986a2dd4e68f962f7664b55f573c6e2947103237f7fa3
           verify js/math.js cc5cb2db9ca99ab84066cb178562b1d8de67b9958d4dc1ca29e9eb74f38c69a9
           verify manifest.json c2ba16e2f02fd891bdd149801110fd7bddfaa51bb08b06e8eabdb4d9813ae9a8
-
           echo "ROOT=$ROOT" >> "$GITHUB_ENV"
-          echo 'Reference runtime hashes match Library archive.'
+          echo 'Reference runtime is byte-identical to Library archive.'
 
-      - name: Restore runtime without soundtrack redistribution
+      - name: Restore runtime
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p game/webgl/css game/webgl/js game/webgl/music
-          rm -rf game/webgl/css game/webgl/js
+          rm -rf game/webgl/css game/webgl/js game/webgl/public
           cp -R "$ROOT/css" game/webgl/css
           cp -R "$ROOT/js" game/webgl/js
           cp "$ROOT/index.html" game/webgl/index.html
           cp "$ROOT/manifest.json" game/webgl/manifest.json
-          if [ -d "$ROOT/public" ]; then
-            rm -rf game/webgl/public
-            cp -R "$ROOT/public" game/webgl/public
-          fi
+          [ ! -d "$ROOT/public" ] || cp -R "$ROOT/public" game/webgl/public
+          mkdir -p game/webgl/music
           cat > game/webgl/music/README.md <<'DOC'
           # Music assets
 
-          The local reference archive contains soundtrack MP3 files that are not redistributed in this public repository. The runtime already falls back to built-in procedural ambient when those files are absent.
+          Soundtrack MP3 files from the local reference archive are intentionally not redistributed in this public repository. The runtime falls back to built-in procedural ambient when they are absent.
           DOC
 
       - name: Quality gate
         shell: bash
         run: |
           set -euo pipefail
-          test -f game/webgl/index.html
-          test -f game/webgl/js/main.js
-          test -f game/webgl/js/WebGLRenderer.js
-          test -f game/webgl/js/assets.js
           node --check game/webgl/js/main.js
           node --check game/webgl/js/WebGLRenderer.js
           node --check game/webgl/js/assets.js
@@ -96,7 +82,6 @@ jobs:
           node --check game/webgl/js/math.js
           npm test --prefix game/webgl
           grep -q 'v3.9' game/webgl/index.html
-          grep -q "from './WebGLRenderer.js'" game/webgl/js/main.js
           test "$(sha256sum game/webgl/js/main.js | awk '{print $1}')" = '51bf88aac3199d48d9b49f32c19b51ada50a385f48540cdb1e82b1b9e3ff3db0'
           test "$(sha256sum game/webgl/js/WebGLRenderer.js | awk '{print $1}')" = '2107f1d000db1952c94ae8b63f1bed894774699ab0208bd6ba172e9ce2a79d91'
           echo 'Runtime quality gate passed.'
@@ -105,8 +90,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f .github/kr3-runtime-bootstrap.zip
-          rm -f .github/workflows/restore-kr3-runtime.yml
+          rm -f .github/kr3-runtime-bootstrap.zip .github/workflows/restore-kr3-runtime.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A game/webgl .github
