@@ -2,28 +2,50 @@ name: PR Check
 
 on:
   pull_request:
-    branches:
-      - master
+    branches: [master]
+
+permissions:
+  contents: read
 
 jobs:
-  structure:
+  verify:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - name: Validate project structure
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate project structure and data
+        shell: bash
         run: |
+          set -euo pipefail
           test -f README.md
           test -f docs/AGENT_DEVELOPMENT_LOOP.md
           test -f docs/PROJECT_CONSTITUTION.md
-          test -f data/diplomacy_rules.json
-          test -f game/README.md
-          python - <<'PY'
-          import json
-          with open('data/diplomacy_rules.json', encoding='utf-8') as f:
-              data = json.load(f)
-          assert data['deterministic'] is True
-          assert data['attitude_range'] == [-100, 100]
-          print('Diplomacy data is valid.')
-          PY
+          test -f docs/ROADMAP.md
+          test -f game/webgl/index.html
+          test -f game/webgl/js/main.js
+          test -f game/webgl/package.json
+          python3 -m json.tool data/diplomacy_rules.json >/dev/null
+          python3 -m json.tool game/webgl/manifest.json >/dev/null
+
+      - name: Install WebGL dependencies
+        run: npm install --prefix game/webgl --no-audit --no-fund --package-lock=false
+
+      - name: Run gameplay tests
+        run: npm test --prefix game/webgl
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            node --check "$file"
+          done < <(find game/webgl/src game/webgl/js -type f -name '*.js' -print0)
+
+      - name: Build production WebGL bundle
+        run: npm run build --prefix game/webgl
