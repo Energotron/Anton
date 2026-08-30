@@ -57,6 +57,21 @@ export function canAcceptDelivery({
   return { ok: true, reason: null };
 }
 
+export function deliveryOfferPresentation(args = {}) {
+  const offer = args.offer || null;
+  const availability = canAcceptDelivery(args);
+  const faction = reputationFaction(offer);
+  const score = faction ? reputationScore(args.reputation || {}, offer) : null;
+
+  return {
+    ...availability,
+    faction,
+    reputation: score,
+    minimumReputation: faction ? DELIVERY_MIN_REPUTATION : null,
+    reputationLocked: availability.reason === 'reputation_too_low',
+  };
+}
+
 export function acceptDelivery(offer, { day = 0, systemId = 0, planetIdx = -1 } = {}) {
   if (!offer) throw new TypeError('offer is required');
   return {
