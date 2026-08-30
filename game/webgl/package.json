@@ -1,18 +1,18 @@
 {
-  "name": "space-rangers-3-webgl",
-  "version": "3.0.0-alpha",
-  "description": "Space Rangers 3 WebGL implementation integrated with the Anton repository",
-  "main": "dist/index.html",
+  "name": "cosmic-rangers-3-webgl",
+  "version": "3.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npx serve dist -p 8080",
-    "build": "node build.js",
+    "dev": "npx vite",
+    "build": "npx vite build",
+    "preview": "npx vite preview",
     "test": "node --test test/*.test.js"
   },
-  "keywords": ["space-rangers", "webgl", "game", "space-sim", "rpg"],
-  "license": "GPL-3.0",
+  "dependencies": {
+    "three": "^0.170.0"
+  },
   "devDependencies": {
-    "serve": "^14.2.0",
-    "terser": "^5.24.0"
+    "vite": "^5.4.11"
   }
 }

@@ -1,7 +1,29 @@
-# Космические Рейнджеры 3 — WebGL
+# Космические Рейнджеры 3 — WebGL v3.8
 
-WebGL implementation/reference build integrated into the main SR3 repository. The Godot prototype remains intact; this implementation lives under `game/webgl/`.
+Пошаговые ходы + гиперпрыжки + посадка на планеты (как в КР2) + WebGL.
 
-The WebGL source is organized as a modular ES6 engine with galaxy, ship, combat, trading, quests, planetary battle, dominator, ranger and AI systems. The generated browser build is under `game/webgl/dist/`.
+## Запуск
+```bash
+npx serve .
+```
+Открой index.html через локальный сервер.
 
-See `docs/WEBGL_INTEGRATION.md` for the integration boundary and development workflow.
+## Управление
+1. Тап по карте — курс (свободный)
+2. Тап по врагу — цель
+3. **ХОД ▶** / Пробел — выполнить ход
+4. **ЖДУ** — выстрел без движения
+5. **РАКЕТА** / Q — ракетный выстрел
+6. **M** — карта галактики (70 систем), тап по системе с кольцом = гиперпрыжок
+7. Подлетите к планете с портом и тапните — посадка: рынок, ремонт, задания, бар
+8. 🔊 — звук; ☰ — музыка
+
+## Файлы
+```
+index.html
+css/style.css
+js/main.js
+js/WebGLRenderer.js
+js/data.js
+js/math.js
+```
