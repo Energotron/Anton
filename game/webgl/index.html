@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#05070f">
+<meta name="description" content="Космические Рейнджеры 3 — WebGL pseudo-3D">
+<title>Космические Рейнджеры 3 — WebGL</title>
+<link rel="manifest" href="manifest.json">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/russo-one@5.0.20/index.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/exo-2@5.0.43/400.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/exo-2@5.0.43/700.css" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <canvas id="cv"></canvas>
+    <div id="errBox"></div>
+
+    <div id="hud" class="hidden">
+      <div id="tl">
+        <div id="sysName">—</div>
+        <div id="dayRank">—</div>
+        <div class="barWrap"><span class="barLbl">Корпус</span><div class="bar hull"><i id="barHull"></i></div></div>
+        <div class="barWrap"><span class="barLbl">Щит</span><div class="bar shield"><i id="barShield"></i></div></div>
+        <div id="res"></div>
+      </div>
+      <div id="tr">
+        <canvas id="mm" width="264" height="264"></canvas>
+        <div id="trBtns"><button id="sndBtn">🔊</button><button id="menuBtn">☰</button></div>
+      </div>
+      <div id="phase">—</div>
+      <div id="questLog"></div>
+      <div id="ctx"></div>
+    </div>
+    <div id="toasts"></div>
+
+    <div id="tbtns" class="hidden">
+      <button id="bWait">ЖДУ</button>
+      <button id="bMis">РАКЕТА</button>
+      <button id="bTurn">ХОД ▶</button>
+    </div>
+    <button id="galClose" class="btn hidden">✕ Закрыть (Esc)</button>
+    <div id="panel" class="hidden"></div>
+
+    <div id="menu">
+      <div id="menuBg"></div>
+      <div id="menuInner">
+        <h1>КОСМИЧЕСКИЕ<br>РЕЙНДЖЕРЫ 3</h1>
+        <div class="sub">WebGL · pseudo-3D · свободный полёт<br>станции · астероиды · шлейфы · корабли</div>
+        <button class="mbtn" id="btnNewGame" type="button">▶ НОВАЯ ИГРА</button>
+        <button class="mbtn" id="contBtn" style="display:none">💾 ПРОДОЛЖИТЬ</button>
+        <button class="mbtn ghost" id="btnHelp">🎮 КАК ИГРАТЬ</button>
+        <div class="ver">v3.9 · камера · сейвы · инфоцентр · спавн с планет</div>
+      </div>
+    </div>
+    <div id="rotHint" class="hidden">🔄 Переверните телефон горизонтально</div>
+  </div>
+
+  <!-- Three.js через importmap (CDN) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+  <!-- Точка входа — отдельный JS-файл -->
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
