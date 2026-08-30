@@ -1,7 +1,21 @@
 export const DELIVERY_XP = 12;
+export const DELIVERY_REPUTATION = 2;
+export const DELIVERY_EXPIRED_REPUTATION = -1;
 
 function nonNegativeInt(value) {
   return Math.max(0, Math.floor(Number(value) || 0));
+}
+
+function reputationFaction(quest) {
+  return quest?.issuerFaction || quest?.faction || null;
+}
+
+function applyReputationDelta(reputation = {}, quest = null, delta = 0) {
+  const nextReputation = { ...reputation };
+  const faction = reputationFaction(quest);
+  if (!faction || !delta) return nextReputation;
+  nextReputation[faction] = Number(nextReputation[faction] || 0) + Number(delta);
+  return nextReputation;
 }
 
 export function cargoUsed(cargo = {}, activeQuest = null) {
@@ -47,16 +61,31 @@ export function resolveDeliveryAtDock({
   cargo = {},
   money = 0,
   xp = 0,
+  reputation = {},
 } = {}) {
   const nextCargo = { ...cargo };
-  if (!quest) return { status: 'none', quest: null, cargo: nextCargo, money, xp };
+  const nextReputation = { ...reputation };
+  if (!quest) return { status: 'none', quest: null, cargo: nextCargo, money, xp, reputation: nextReputation };
 
   if (isQuestExpired(quest, day)) {
-    return { status: 'expired', quest: null, cargo: nextCargo, money, xp };
+    const reputationAfterExpiry = applyReputationDelta(
+      nextReputation,
+      quest,
+      DELIVERY_EXPIRED_REPUTATION,
+    );
+    return {
+      status: 'expired',
+      quest: null,
+      cargo: nextCargo,
+      money,
+      xp,
+      reputation: reputationAfterExpiry,
+      reputationDelta: reputationFaction(quest) ? DELIVERY_EXPIRED_REPUTATION : 0,
+    };
   }
 
   if (quest.sys !== systemId || quest.pl !== planetIdx) {
-    return { status: 'not_here', quest, cargo: nextCargo, money, xp };
+    return { status: 'not_here', quest, cargo: nextCargo, money, xp, reputation: nextReputation };
   }
 
   // Compatibility with pre-missionCargo saves: old builds placed quest goods
@@ -65,20 +94,30 @@ export function resolveDeliveryAtDock({
     const have = nonNegativeInt(nextCargo[quest.g]);
     const required = nonNegativeInt(quest.q);
     if (have < required) {
-      return { status: 'missing_cargo', quest, cargo: nextCargo, money, xp };
+      return {
+        status: 'missing_cargo',
+        quest,
+        cargo: nextCargo,
+        money,
+        xp,
+        reputation: nextReputation,
+      };
     }
     const remaining = have - required;
     if (remaining > 0) nextCargo[quest.g] = remaining;
     else delete nextCargo[quest.g];
   }
 
+  const reputationAfterCompletion = applyReputationDelta(nextReputation, quest, DELIVERY_REPUTATION);
   return {
     status: 'completed',
     quest: null,
     cargo: nextCargo,
     money: Number(money) + Number(quest.pay || 0),
     xp: Number(xp) + DELIVERY_XP,
+    reputation: reputationAfterCompletion,
     reward: Number(quest.pay || 0),
     xpAward: DELIVERY_XP,
+    reputationDelta: reputationFaction(quest) ? DELIVERY_REPUTATION : 0,
   };
 }

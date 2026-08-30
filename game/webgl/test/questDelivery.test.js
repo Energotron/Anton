@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  DELIVERY_EXPIRED_REPUTATION,
+  DELIVERY_REPUTATION,
   DELIVERY_XP,
   acceptDelivery,
   canAcceptDelivery,
@@ -58,6 +60,47 @@ test('new mission cargo completes at the destination and pays reward plus XP', (
   assert.deepEqual(result.cargo, { ore: 3 });
   assert.equal(result.money, 1000);
   assert.equal(result.xp, 4 + DELIVERY_XP);
+});
+
+test('completed faction delivery increases issuer reputation', () => {
+  const quest = acceptDelivery({ ...OFFER, issuerFaction: 'gaal' });
+  const result = resolveDeliveryAtDock({
+    quest,
+    day: 10,
+    systemId: 7,
+    planetIdx: 2,
+    reputation: { gaal: 5, peleng: -1 },
+  });
+  assert.equal(result.status, 'completed');
+  assert.deepEqual(result.reputation, { gaal: 5 + DELIVERY_REPUTATION, peleng: -1 });
+  assert.equal(result.reputationDelta, DELIVERY_REPUTATION);
+});
+
+test('expired faction delivery lowers issuer reputation', () => {
+  const quest = acceptDelivery({ ...OFFER, faction: 'malok' });
+  const result = resolveDeliveryAtDock({
+    quest,
+    day: 15,
+    systemId: 7,
+    planetIdx: 2,
+    reputation: { malok: 2 },
+  });
+  assert.equal(result.status, 'expired');
+  assert.deepEqual(result.reputation, { malok: 2 + DELIVERY_EXPIRED_REPUTATION });
+  assert.equal(result.reputationDelta, DELIVERY_EXPIRED_REPUTATION);
+});
+
+test('factionless delivery leaves reputation unchanged', () => {
+  const quest = acceptDelivery(OFFER);
+  const result = resolveDeliveryAtDock({
+    quest,
+    day: 10,
+    systemId: 7,
+    planetIdx: 2,
+    reputation: { gaal: 4 },
+  });
+  assert.deepEqual(result.reputation, { gaal: 4 });
+  assert.equal(result.reputationDelta, 0);
 });
 
 test('legacy quest cargo is consumed instead of becoming free market goods', () => {
