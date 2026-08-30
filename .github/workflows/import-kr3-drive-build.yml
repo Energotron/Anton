@@ -1,0 +1,112 @@
+name: Import KR3 v0.3.9 Drive Build
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/import-kr3-drive-build.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  import-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Download verified split archive from Google Drive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/kr3-parts /tmp/kr3-extract
+          cd /tmp/kr3-parts
+
+          curl --fail --location --retry 3 --silent --show-error \
+            'https://drive.usercontent.google.com/download?id=1wI07qraWtRol65I-7olvbBrQlmRXd1Lj&export=download&confirm=t' \
+            -o Space-Rangers-3-v0.3.9.z01
+          curl --fail --location --retry 3 --silent --show-error \
+            'https://drive.usercontent.google.com/download?id=1NZOE5Qy5oCDoJFNtOPa9SxHFYi--E2PO&export=download&confirm=t' \
+            -o Space-Rangers-3-v0.3.9.z02
+          curl --fail --location --retry 3 --silent --show-error \
+            'https://drive.usercontent.google.com/download?id=1ON-eU0pQsQFjYbjjy_nqF23P4f9azK20&export=download&confirm=t' \
+            -o Space-Rangers-3-v0.3.9.zip
+
+          echo 'c2f32618ca862fa0185040b3b3e1c3ea4e5f1027c0b94457373c0d73898bceff  Space-Rangers-3-v0.3.9.z01' | sha256sum -c -
+          echo '32d4d3b1b0f8269d83a15516f6b71b0ca3fe41aedbac03279de7415d3cbddaef  Space-Rangers-3-v0.3.9.z02' | sha256sum -c -
+          echo '457d71ac387c7f130eac1fc7c3323763b6de9cc40b29374ca21f8303c4346423  Space-Rangers-3-v0.3.9.zip' | sha256sum -c -
+
+          zip -s 0 Space-Rangers-3-v0.3.9.zip --out /tmp/kr3-full.zip
+          unzip -tq /tmp/kr3-full.zip
+          unzip -q /tmp/kr3-full.zip -d /tmp/kr3-extract
+          test -f /tmp/kr3-extract/sr3-webgl/index.html
+          test -f /tmp/kr3-extract/sr3-webgl/js/main.js
+          test -f /tmp/kr3-extract/sr3-webgl/music/flight.mp3
+
+      - name: Import full runtime while preserving development harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp game/webgl/package.json /tmp/kr3-package.json
+          cp game/webgl/README.md /tmp/kr3-readme.md
+
+          rsync -a /tmp/kr3-extract/sr3-webgl/ game/webgl/
+
+          cp /tmp/kr3-package.json game/webgl/package.json
+          cp /tmp/kr3-readme.md game/webgl/README.md
+
+          test -d game/webgl/src
+          test -d game/webgl/test
+          test -f game/webgl/build.js
+
+      - name: Quality gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f game/webgl/index.html
+          test -f game/webgl/css/style.css
+          test -f game/webgl/js/main.js
+          test -f game/webgl/js/WebGLRenderer.js
+          test -f game/webgl/js/assets.js
+          test -f game/webgl/js/data.js
+          test -f game/webgl/js/math.js
+          test -f game/webgl/manifest.json
+          test -f game/webgl/public/original-v2.1.html
+
+          for track in flight fighter human gaal fei quasar peleng maloc; do
+            test -s "game/webgl/music/${track}.mp3"
+          done
+
+          node --check game/webgl/js/main.js
+          node --check game/webgl/js/WebGLRenderer.js
+          node --check game/webgl/js/assets.js
+          node --check game/webgl/js/data.js
+          node --check game/webgl/js/math.js
+          grep -q 'v3.9' game/webgl/index.html
+          npm test --prefix game/webgl
+
+          echo 'Full KR3 v0.3.9 runtime quality gate passed.'
+
+      - name: Commit imported build
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          rm -f .github/workflows/import-kr3-drive-build.yml
+          git add -A game/webgl .github/workflows/import-kr3-drive-build.yml
+          git diff --cached --quiet && exit 0
+
+          git fetch origin master
+          test "$(git rev-parse origin/master)" = "$GITHUB_SHA" || {
+            echo 'master advanced during import; refusing non-fast-forward push' >&2
+            exit 1
+          }
+
+          git commit -m 'feat: import full KR3 v0.3.9 WebGL build'
+          git push origin HEAD:master
