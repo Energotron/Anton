@@ -1,136 +1,54 @@
-name: 🤖 Agent Continuous Development (24/7)
+name: KR3 Runtime Health
 
 on:
   schedule:
     - cron: '0 */6 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  build:
-    name: 🧠 Phase 0.1 - Foundation
+  health:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout master
+        uses: actions/checkout@v4
         with:
           ref: master
-          fetch-depth: 0
 
-      - name: ✅ Agent Check
-        run: |
-          echo "🤖 Agent Autonomy System - Phase 0.1"
-          echo "Time: $(date -u)"
-          echo "Status: STARTING"
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
-      - name: 📋 Validate JSON
+      - name: Validate runtime and data
+        shell: bash
         run: |
-          for file in data/*.json; do
-            [ -f "$file" ] && python3 -m json.tool "$file" > /dev/null && echo "✓ $file" || true
+          set -euo pipefail
+          test -s game/webgl/index.html
+          test -s game/webgl/js/main.js
+          test -s game/webgl/js/WebGLRenderer.js
+          python3 -m json.tool data/diplomacy_rules.json >/dev/null
+          python3 -m json.tool game/webgl/manifest.json >/dev/null
+          for track in flight fighter human gaal fei quasar peleng maloc; do
+            test -s "game/webgl/music/${track}.mp3"
           done
 
-      - name: 📁 Init Godot foundation
-        run: |
-          mkdir -p game/scenes/{systems,ui,core}
-          mkdir -p game/scripts/systems
-          mkdir -p data
+      - name: Install WebGL dependencies
+        run: npm install --prefix game/webgl --no-audit --no-fund --package-lock=false
 
-      - name: ⚔️ DiplomacyEngine
-        run: |
-          if [ ! -f "game/scripts/systems/diplomacy_engine.gd" ]; then
-            cat > game/scripts/systems/diplomacy_engine.gd <<'GCODE'
-          extends Node
-          class_name DiplomacyEngine
-          var rules: Dictionary = {}
-          var factions: Dictionary = {}
-          var relationships: Dictionary = {}
-          func _ready() -> void:
-            load_rules()
-            load_factions()
-            initialize_relationships()
-          func load_rules() -> void:
-            var file = FileAccess.open("res://data/diplomacy_rules.json", FileAccess.READ)
-            if file:
-              var json = JSON.new()
-              rules = json.parse_string(file.get_as_text())
-          func load_factions() -> void:
-            var file = FileAccess.open("res://data/factions.json", FileAccess.READ)
-            if file:
-              var json = JSON.new()
-              var data = json.parse_string(file.get_as_text())
-              for faction in data.get("factions", []):
-                factions[faction["id"]] = faction
-          func initialize_relationships() -> void:
-            for faction_id in factions.keys():
-              var psych = factions[faction_id].get("psychology", {})
-              relationships[faction_id] = psych.get("trust", 0)
-          func apply_modifier(faction_id: String, modifier_type: String, amount: int = 1) -> int:
-            if not faction_id in relationships:
-              push_error("Unknown faction: " + faction_id)
-              return 0
-            var modifiers = rules.get("actions", {})
-            var mod_value = modifiers.get(modifier_type, 0) * amount
-            var range_config = rules.get("attitude_range", [-100, 100])
-            relationships[faction_id] = clamp(relationships[faction_id] + mod_value, range_config[0], range_config[1])
-            return relationships[faction_id]
-          func get_relationship(faction_id: String) -> int:
-            return relationships.get(faction_id, 0)
-          func reset_relationships() -> void:
-            initialize_relationships()
-          func test_determinism() -> bool:
-            reset_relationships()
-            var test1 = apply_modifier("coalition", "trade", 1)
-            reset_relationships()
-            var test2 = apply_modifier("coalition", "trade", 1)
-            return test1 == test2
-          GCODE
-          fi
+      - name: Run gameplay tests
+        run: npm test --prefix game/webgl
 
-      - name: 📊 Faction Data
-        run: |
-          if [ ! -f "data/factions.json" ]; then
-            cat > data/factions.json <<'JDATA'
-          {"factions":[{"id":"coalition","name":"Coalition Command","psychology":{"trust":0,"fear":0,"respect":0,"resentment":0,"dependency":0},"attitude_range":[-100,100],"description":"The unified human & allied forces"},{"id":"keller","name":"Keller's Deep War","psychology":{"trust":-30,"fear":20,"respect":0,"resentment":0,"dependency":0},"attitude_range":[-100,100],"description":"Legendary strategist leading guerrilla war in deep hyperspace"},{"id":"feyan_gaal","name":"Feyan-Gaal Saionic Order","psychology":{"trust":10,"fear":-10,"respect":20,"resentment":0,"dependency":0},"attitude_range":[-100,100],"description":"Probability-seers and elite navigators"},{"id":"malok_peleng","name":"Malok-Peleng Techno-Berserkers","psychology":{"trust":-20,"fear":10,"respect":0,"resentment":0,"dependency":0},"attitude_range":[-100,100],"description":"Tech-scavenging survivors, chaotic but valuable"}]}
-          JDATA
-          fi
+      - name: Build production WebGL bundle
+        run: npm run build --prefix game/webgl
 
-      - name: 🧪 Run Tests
+      - name: Check repository stayed clean
+        shell: bash
         run: |
-          python3 - <<'PY'
-          import json, os
-          with open('data/diplomacy_rules.json', encoding='utf-8') as f:
-              rules = json.load(f)
-          def apply_mod(rel, typ, amt=1):
-              val = rules.get('actions', {}).get(typ, 0) * amt
-              r = rules.get('attitude_range', [-100, 100])
-              return max(r[0], min(r[1], rel + val))
-          assert apply_mod(0, 'trade') == apply_mod(0, 'trade')
-          assert apply_mod(100, 'attack', 5) == -100
-          assert apply_mod(-100, 'aid', 5) == -50
-          for m in ['trade', 'aid', 'threat', 'attack']:
-              assert m in rules['actions']
-          if os.path.exists('data/factions.json'):
-              data = json.load(open('data/factions.json', encoding='utf-8'))
-              assert len(data.get('factions', [])) >= 4
-              for f in data['factions']:
-                  assert all(k in f for k in ['id', 'name', 'psychology', 'attitude_range', 'description'])
-          print('All validation tests passed')
-          PY
-
-      - name: 📝 Update Log
-        run: |
-          mkdir -p docs
-          echo "### Cycle: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> docs/AUTOMATION_LOG.md
-          echo "- Status: ✅ Complete" >> docs/AUTOMATION_LOG.md
-          echo "- Phase: 0.1" >> docs/AUTOMATION_LOG.md
-          echo >> docs/AUTOMATION_LOG.md
-
-      - name: 💾 Commit & Push to canonical master
-        run: |
-          git config user.name "Agent Autonomy"
-          git config user.email "agent@energotron.dev"
-          git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "chore(agent): Phase 0.1 cycle - $(date -u +%Y-%m-%d_%H-%M_UTC)"
-            git push origin HEAD:master
-          fi
+          git status --short
+          test -z "$(git status --porcelain)" || {
+            echo 'Health check modified tracked files; refusing silent drift.' >&2
+            exit 1
+          }
