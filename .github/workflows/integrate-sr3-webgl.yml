@@ -1,10 +1,8 @@
-name: Validate SR3 WebGL
+name: Validate & Build SR3 WebGL
 
 on:
   push:
-    branches:
-      - master
-      - agent/kr3-dev
+    branches: [master]
     paths:
       - 'game/webgl/**'
       - '.github/workflows/integrate-sr3-webgl.yml'
@@ -14,20 +12,62 @@ permissions:
   contents: read
 
 jobs:
-  validate:
+  validate-webgl:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Run quest system tests
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify full runtime layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            game/webgl/index.html \
+            game/webgl/css/style.css \
+            game/webgl/js/main.js \
+            game/webgl/js/WebGLRenderer.js \
+            game/webgl/js/assets.js \
+            game/webgl/js/data.js \
+            game/webgl/js/math.js \
+            game/webgl/manifest.json; do
+            test -s "$file"
+          done
+          for track in flight fighter human gaal fei quasar peleng maloc; do
+            test -s "game/webgl/music/${track}.mp3"
+          done
+
+      - name: Install WebGL dependencies
+        run: npm install --prefix game/webgl --no-audit --no-fund --package-lock=false
+
+      - name: Run gameplay tests
         run: npm test --prefix game/webgl
+
       - name: Check JavaScript syntax
         shell: bash
         run: |
-          files=()
-          while IFS= read -r -d '' file; do files+=("$file"); done < <(
-            find game/webgl/src game/webgl/js -type f -name '*.js' -print0 2>/dev/null || true
-          )
-          for file in "${files[@]}"; do
+          set -euo pipefail
+          count=0
+          while IFS= read -r -d '' file; do
             node --check "$file"
-          done
-          echo "Validated ${#files[@]} JavaScript source files."
+            count=$((count + 1))
+          done < <(find game/webgl/src game/webgl/js -type f -name '*.js' -print0)
+          echo "Validated ${count} JavaScript files."
+
+      - name: Build production WebGL bundle
+        run: npm run build --prefix game/webgl
+
+      - name: Upload verified browser build
+        uses: actions/upload-artifact@v4
+        with:
+          name: sr3-webgl-${{ github.sha }}
+          path: |
+            game/webgl/dist
+            game/webgl/music
+          if-no-files-found: error
+          retention-days: 7
