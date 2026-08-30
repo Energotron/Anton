@@ -1,11 +1,16 @@
-name: Create KR3 v0.3.9 Alpha Release
+name: Build & Publish KR3 Release
 
 on:
-  push:
-    branches: [master]
-    paths:
-      - '.github/workflows/create-kr3-release.yml'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, e.g. v0.4.0-alpha'
+        required: true
+        default: 'v0.3.9-alpha'
+      title:
+        description: 'Release title'
+        required: true
+        default: 'Space Rangers 3: Children of Eltan'
 
 permissions:
   contents: write
@@ -14,20 +19,55 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout master
         uses: actions/checkout@v4
+        with:
+          ref: master
 
-      - name: Create release if missing
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install WebGL dependencies
+        run: npm install --prefix game/webgl --no-audit --no-fund --package-lock=false
+
+      - name: Run gameplay tests
+        run: npm test --prefix game/webgl
+
+      - name: Build production WebGL bundle
+        run: npm run build --prefix game/webgl
+
+      - name: Package verified WebGL game
+        id: package
         shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          if gh release view v0.3.9-alpha >/dev/null 2>&1; then
-            echo 'Release v0.3.9-alpha already exists.'
-            exit 0
+          SAFE_TAG="${TAG//\//-}"
+          ARCHIVE="Space-Rangers-3-WebGL-${SAFE_TAG}.zip"
+          zip -r "$ARCHIVE" game/webgl \
+            -x 'game/webgl/node_modules/*' \
+               'game/webgl/test/*' \
+               'game/webgl/src/*'
+          unzip -tq "$ARCHIVE"
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          TITLE: ${{ inputs.title }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ARCHIVE" --clobber
+          else
+            gh release create "$TAG" "$ARCHIVE" \
+              --target master \
+              --title "$TITLE $TAG" \
+              --generate-notes
           fi
-          gh release create v0.3.9-alpha \
-            --target master \
-            --title 'Space Rangers 3: Children of Eltan v0.3.9 Alpha' \
-            --notes 'Alpha WebGL build. The distributable archive is split into three volumes (z01, z02, zip) for upload-size compatibility. Place all three volumes in one folder and open the .zip volume with 7-Zip or WinRAR.'
