@@ -109,6 +109,40 @@ export function abandonDelivery({ quest = null, reputation = {} } = {}) {
   };
 }
 
+export function resolveDeliveryOnDayAdvance({ quest = null, day = 0, reputation = {} } = {}) {
+  const nextReputation = { ...reputation };
+  if (!quest) {
+    return {
+      status: 'none',
+      quest: null,
+      reputation: nextReputation,
+      reputationDelta: 0,
+    };
+  }
+
+  if (!isQuestExpired(quest, day)) {
+    return {
+      status: 'active',
+      quest,
+      reputation: nextReputation,
+      reputationDelta: 0,
+    };
+  }
+
+  const reputationAfterExpiry = applyReputationDelta(
+    nextReputation,
+    quest,
+    DELIVERY_EXPIRED_REPUTATION,
+  );
+
+  return {
+    status: 'expired',
+    quest: null,
+    reputation: reputationAfterExpiry,
+    reputationDelta: reputationFaction(quest) ? DELIVERY_EXPIRED_REPUTATION : 0,
+  };
+}
+
 export function resolveDeliveryAtDock({
   quest = null,
   day = 0,
