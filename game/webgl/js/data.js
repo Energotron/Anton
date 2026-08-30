@@ -32,7 +32,8 @@ export const WEAPONS = [
   {n:'Плазменная пушка',dmg:14,rate:3.4,range:400,c:'#7dff8a',p:6500},
   {n:'Ионный бластер',dmg:11,rate:6.5,range:400,c:'#cf9aff',p:12500},
   {n:'Дезинтегратор',dmg:26,rate:2.8,range:430,c:'#ffee7d',p:26000},
-  {n:'Фазер «Класс-Х»',dmg:42,rate:2.4,range:460,c:'#ff9a5c',p:60000}
+  {n:'Фазер «Класс-Х»',dmg:42,rate:2.4,range:460,c:'#ff9a5c',p:60000},
+  {n:'Гаальский фазовый резонатор',dmg:58,rate:2.0,range:520,c:'#b8a0ff',p:95000}
 ];
 export const ENGINES = [
   {n:'Ионный двигатель',spd:170,p:0},
