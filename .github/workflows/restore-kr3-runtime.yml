@@ -1,0 +1,76 @@
+name: Restore KR3 WebGL Runtime
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/kr3-runtime-bootstrap.zip'
+      - '.github/workflows/restore-kr3-runtime.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Restore verified runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .github/kr3-runtime-bootstrap.zip
+          mkdir -p game/webgl
+          unzip -oq .github/kr3-runtime-bootstrap.zip -d game/webgl
+
+          test -f game/webgl/index.html
+          test -f game/webgl/css/style.css
+          test -f game/webgl/js/main.js
+          test -f game/webgl/js/WebGLRenderer.js
+          test -f game/webgl/js/assets.js
+          test -f game/webgl/js/data.js
+          test -f game/webgl/js/math.js
+          test -f game/webgl/manifest.json
+
+          node --check game/webgl/js/main.js
+          node --check game/webgl/js/WebGLRenderer.js
+          node --check game/webgl/js/assets.js
+          node --check game/webgl/js/data.js
+          node --check game/webgl/js/math.js
+          find game/webgl/js/assets -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+
+          npm test --prefix game/webgl
+
+          node --input-type=module <<'NODE'
+          import { PROC_TEXTURES, PROC_SHIP_VERTS, SYSNAMES_EXT } from './game/webgl/js/assets.js';
+          const seed = PROC_TEXTURES.nebula_a.length % 9973;
+          if (seed !== 5957) throw new Error(`renderer seed changed: ${seed}`);
+          if (SYSNAMES_EXT.length !== 400) throw new Error(`expected 400 system names, got ${SYSNAMES_EXT.length}`);
+          const ships = ['fighter','freighter','raider','pirate','patrol','station_hub'];
+          for (const ship of ships) {
+            if (!Array.isArray(PROC_SHIP_VERTS[ship]) || PROC_SHIP_VERTS[ship].length === 0) {
+              throw new Error(`missing ship geometry: ${ship}`);
+            }
+          }
+          console.log('Runtime asset compatibility gate passed.');
+          NODE
+
+          grep -q 'v3.9' game/webgl/index.html
+          grep -q "from './WebGLRenderer.js'" game/webgl/js/main.js
+
+      - name: Commit restored runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/kr3-runtime-bootstrap.zip
+          rm -f .github/workflows/restore-kr3-runtime.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A game/webgl .github
+          git diff --cached --quiet && exit 0
+          git commit -m 'feat: restore SR3 WebGL v3.9 runtime'
+          git push origin HEAD:master
