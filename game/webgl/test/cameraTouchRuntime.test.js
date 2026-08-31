@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CAMERA_PAN_CODES, buildCameraControlState } from '../src/cameraTouchRuntime.js';
+import {
+  CAMERA_PAN_CODES,
+  CAMERA_PAN_HOLD,
+  buildCameraControlState,
+  cameraPanPulseCount
+} from '../src/cameraTouchRuntime.js';
 
 test('camera pan directions map to existing runtime navigation keys', () => {
   assert.deepEqual(CAMERA_PAN_CODES, { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' });
@@ -13,4 +18,15 @@ test('minimap mode clearly separates ship course from camera focus', () => {
   assert.match(course.modeLabel, /Курс/);
   assert.equal(camera.minimapCameraMode, true);
   assert.match(camera.modeTitle, /камерой/);
+});
+
+test('short camera tap remains exactly one pan pulse', () => {
+  assert.equal(cameraPanPulseCount(0), 1);
+  assert.equal(cameraPanPulseCount(CAMERA_PAN_HOLD.delayMs - 1), 1);
+});
+
+test('holding a camera arrow repeats pan pulses at a bounded cadence', () => {
+  assert.equal(cameraPanPulseCount(CAMERA_PAN_HOLD.delayMs), 2);
+  assert.equal(cameraPanPulseCount(CAMERA_PAN_HOLD.delayMs + CAMERA_PAN_HOLD.repeatMs), 3);
+  assert.equal(cameraPanPulseCount(1000), 11);
 });
