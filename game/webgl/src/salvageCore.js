@@ -33,6 +33,26 @@ export function buildSalvageDrop(ship, roll = Math.random(), amountRoll = Math.r
   };
 }
 
+export function getSalvageRadarContacts(player = {}, loot = []) {
+  const px = Number(player.x);
+  const py = Number(player.y);
+  const radar = Math.max(0, Number(player.radar) || 0);
+  if (!Number.isFinite(px) || !Number.isFinite(py) || radar <= 0 || !Array.isArray(loot)) return [];
+
+  return loot
+    .filter(item => item && Number(item.amount) > 0 && Number.isFinite(Number(item.x)) && Number.isFinite(Number(item.y)))
+    .map(item => ({
+      id: item.id ?? null,
+      goodId: item.goodId,
+      amount: Number(item.amount),
+      x: Number(item.x),
+      y: Number(item.y),
+      distance: Math.hypot(Number(item.x) - px, Number(item.y) - py)
+    }))
+    .filter(item => item.distance <= radar)
+    .sort((a, b) => a.distance - b.distance);
+}
+
 export function planSalvagePickup(player, loot) {
   if (!loot || !loot.goodId || !Number.isFinite(Number(loot.amount)) || Number(loot.amount) <= 0) {
     return { take: 0, remaining: 0, reason: 'invalid' };
