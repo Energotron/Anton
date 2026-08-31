@@ -5,7 +5,8 @@ import {
   SALVAGE_PICKUP_RADIUS,
   applySalvagePickup,
   buildSalvageDrop,
-  cargoUsed
+  cargoUsed,
+  getSalvageRadarContacts
 } from './salvageCore.js';
 
 const PATCH_FLAG = Symbol.for('kr3.salvageRuntime.patched');
@@ -14,6 +15,11 @@ const LOOT_COLORS = {
   ore: 0x8fd3ff,
   mach: 0xffd36a,
   weap: 0xff6f91
+};
+const LOOT_RADAR_COLORS = {
+  ore: '#8fd3ff',
+  mach: '#ffd36a',
+  weap: '#ff6f91'
 };
 
 function notify(message, cls = '') {
@@ -44,10 +50,92 @@ function ensureState(renderer) {
     ships: new Map(),
     player: null,
     serial: 1,
-    lastBadgeText: ''
+    lastBadgeText: '',
+    camX: 0,
+    camY: 0,
+    radarCanvas: null,
+    radarCtx: null
   };
   STATE.set(renderer, state);
   return state;
+}
+
+function ensureRadarOverlay(renderer) {
+  if (typeof document === 'undefined') return null;
+  const state = ensureState(renderer);
+  if (state.radarCanvas?.isConnected && state.radarCtx) return state.radarCtx;
+  const minimap = document.getElementById('mm');
+  const host = minimap?.parentElement;
+  if (!minimap || !host) return null;
+
+  let canvas = document.getElementById('salvageMm');
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    canvas.id = 'salvageMm';
+    canvas.width = 264;
+    canvas.height = 264;
+    canvas.setAttribute('aria-hidden', 'true');
+    canvas.style.position = 'absolute';
+    canvas.style.top = '0';
+    canvas.style.right = '0';
+    canvas.style.width = '132px';
+    canvas.style.height = '132px';
+    canvas.style.pointerEvents = 'none';
+    canvas.style.borderRadius = '50%';
+    canvas.style.zIndex = '2';
+    host.appendChild(canvas);
+  }
+  state.radarCanvas = canvas;
+  state.radarCtx = canvas.getContext('2d');
+  return state.radarCtx;
+}
+
+function drawRadarOverlay(renderer) {
+  const state = ensureState(renderer);
+  const ctx = ensureRadarOverlay(renderer);
+  if (!ctx) return;
+  const S = 264;
+  ctx.clearRect(0, 0, S, S);
+  const player = state.player;
+  if (!player) return;
+
+  const contacts = getSalvageRadarContacts(player, state.loot);
+  if (!contacts.length) return;
+  const viewRadius = Math.max(700, Number(player.radar) || 900);
+  const k = 120 / viewRadius;
+  const ox = Number.isFinite(state.camX) ? state.camX : Number(player.x) || 0;
+  const oy = Number.isFinite(state.camY) ? state.camY : Number(player.y) || 0;
+  const pulse = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 280;
+
+  for (const contact of contacts) {
+    const x = (contact.x - ox) * k + 132;
+    const y = (contact.y - oy) * k + 132;
+    if (Math.hypot(x - 132, y - 132) > 124) continue;
+    const color = LOOT_RADAR_COLORS[contact.goodId] || '#ffffff';
+    const ring = 5.5 + Math.sin(pulse + contact.distance * 0.02) * 1.3;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = color;
+    ctx.fillRect(-3.2, -3.2, 6.4, 6.4);
+    ctx.restore();
+
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.55;
+    ctx.beginPath();
+    ctx.arc(x, y, ring, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    if (contact.amount > 1) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12px Exo 2, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(contact.amount), x + 7, y);
+    }
+  }
 }
 
 function disposeObject(object) {
@@ -67,6 +155,7 @@ function clearLoot(renderer) {
   state.loot.length = 0;
   state.ships.clear();
   updateBadge(renderer);
+  drawRadarOverlay(renderer);
 }
 
 function makeLootMesh(drop) {
@@ -121,6 +210,7 @@ function spawnLoot(renderer, ship, x, y) {
   const good = SALVAGE_GOODS[loot.goodId];
   notify(`🧲 Обломки: ${good?.icon || '📦'} ${good?.name || loot.goodId} ×${loot.amount}`);
   updateBadge(renderer);
+  drawRadarOverlay(renderer);
   return loot;
 }
 
@@ -130,6 +220,7 @@ function removeLoot(renderer, loot) {
   disposeObject(loot.mesh);
   state.loot = state.loot.filter(item => item !== loot);
   STATE.set(renderer, state);
+  drawRadarOverlay(renderer);
 }
 
 function updateBadge(renderer) {
@@ -149,7 +240,7 @@ function updateBadge(renderer) {
     badge.style.textShadow = '0 1px 2px #000';
     host.appendChild(badge);
   }
-  const nearby = state.loot.filter(loot => Math.hypot(player.x - loot.x, player.y - loot.y) <= (player.radar || 540)).length;
+  const nearby = getSalvageRadarContacts(player, state.loot).length;
   const text = `🧲 Обломки: ${nearby} · 📦 ${cargoUsed(player.cargo)}/${player.cap || 0}`;
   if (text !== state.lastBadgeText) {
     badge.textContent = text;
@@ -182,6 +273,7 @@ function collectNearby(renderer, player) {
     if (before !== loot.amount) updateBadge(renderer);
   }
   updateBadge(renderer);
+  drawRadarOverlay(renderer);
 }
 
 function animateLoot(renderer, dt) {
@@ -192,6 +284,7 @@ function animateLoot(renderer, dt) {
     const scale = 1 + Math.sin(loot.pulse) * 0.08;
     loot.mesh.scale.setScalar(scale);
   }
+  drawRadarOverlay(renderer);
 }
 
 export function installSalvageRuntime() {
@@ -202,6 +295,7 @@ export function installSalvageRuntime() {
   const originalAddShip = proto.addShip;
   const originalRemoveShip = proto.removeShip;
   const originalSetPlayer = proto.setPlayer;
+  const originalSetCameraTarget = proto.setCameraTarget;
   const originalUpdate = proto.update;
   const originalClearShips = proto.clearShips;
 
@@ -229,6 +323,13 @@ export function installSalvageRuntime() {
     const result = originalSetPlayer.call(this, player);
     if (player) collectNearby(this, player);
     return result;
+  };
+
+  proto.setCameraTarget = function patchedSetCameraTarget(x, y, shake) {
+    const state = ensureState(this);
+    if (Number.isFinite(Number(x))) state.camX = Number(x);
+    if (Number.isFinite(Number(y))) state.camY = Number(y);
+    return originalSetCameraTarget.call(this, x, y, shake);
   };
 
   proto.update = function patchedUpdate(dt) {
