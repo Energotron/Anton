@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Energotron/space_rangers3/blob/master/quantdeus-mesh/event-schema.json",
+  "title": "QuantDeus Mesh Event",
+  "type": "object",
+  "required": ["id", "type", "project", "timestamp", "visibility", "title", "summary", "provenance"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "type": {
+      "type": "string",
+      "enum": [
+        "kr3.build.success",
+        "kr3.gameplay.increment",
+        "kr3.release.intent",
+        "kr3.release.published",
+        "kr3.asset.added",
+        "kr3.audio.updated",
+        "kr3.research.updated",
+        "mesh.integration"
+      ]
+    },
+    "project": { "const": "kr3-children-of-eltan" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "visibility": { "type": "string", "enum": ["internal", "public"] },
+    "title": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "highlights": { "type": "array", "items": { "type": "string" } },
+    "provenance": {
+      "type": "object",
+      "required": ["repository", "branch", "sha"],
+      "properties": {
+        "repository": { "const": "Energotron/space_rangers3" },
+        "branch": { "const": "master" },
+        "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "runtime": { "type": "string" },
+        "releaseTag": { "type": "string" },
+        "wixRecordId": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
