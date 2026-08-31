@@ -24,7 +24,7 @@ function readLiveSave(win) {
   }
 }
 
-export function focusSalvageContact(win = globalThis?.window, save = null, contact = null) {
+function dispatchSalvageMinimapCommand(win, save, contact, shiftKey) {
   const doc = win?.document;
   const minimap = doc?.getElementById?.('mm');
   const point = salvageContactToMinimapPoint(save, contact);
@@ -42,10 +42,18 @@ export function focusSalvageContact(win = globalThis?.window, save = null, conta
     pointerType: 'mouse',
     button: 0,
     buttons: 1,
-    shiftKey: true,
+    shiftKey: Boolean(shiftKey),
   });
   minimap.dispatchEvent(event);
   return true;
+}
+
+export function focusSalvageContact(win = globalThis?.window, save = null, contact = null) {
+  return dispatchSalvageMinimapCommand(win, save, contact, true);
+}
+
+export function courseSalvageContact(win = globalThis?.window, save = null, contact = null) {
+  return dispatchSalvageMinimapCommand(win, save, contact, false);
 }
 
 export function showSalvageRadarPanel(win = globalThis?.window) {
@@ -55,21 +63,23 @@ export function showSalvageRadarPanel(win = globalThis?.window) {
   const save = readLiveSave(win);
   const summary = buildSalvageRadarSummary(save);
   const rows = summary.visible.length
-    ? summary.visible.map((contact, index) => `<div class="evTxt" style="margin:6px 0"><b>🧲 ${esc(contact.goodName)} ×${contact.amount}</b> · ${contact.distance} м · ${esc(contact.bearing)}${contact.sourceType ? ` · обломки ${esc(contact.sourceType)}` : ''} <button class="mini" type="button" data-salvage-focus="${index}">📷 Фокус</button></div>`).join('')
+    ? summary.visible.map((contact, index) => `<div class="evTxt" style="margin:6px 0"><b>🧲 ${esc(contact.goodName)} ×${contact.amount}</b> · ${contact.distance} м · ${esc(contact.bearing)}${contact.sourceType ? ` · обломки ${esc(contact.sourceType)}` : ''} <button class="mini" type="button" data-salvage-course="${index}">📍 Курс</button> <button class="mini" type="button" data-salvage-focus="${index}">📷 Фокус</button></div>`).join('')
     : '<div class="evTxt">В пределах радара нет сохранённых обломков.</div>';
   const nearest = summary.nearest
     ? `Ближайший контакт: ${esc(summary.nearest.goodName)} ×${summary.nearest.amount}, ${summary.nearest.distance} м, курс ${esc(summary.nearest.bearing)}.`
     : 'Радар не видит доступного salvage.';
   panel.innerHTML = `<div class="pbox"><h2>🧲 Радар обломков</h2><div class="sub">Локационная сводка по сохранённому salvage текущей системы.</div><div class="evTxt" style="margin-top:10px">${nearest}<br>В зоне радара: ${summary.visible.length} · единиц груза: ${summary.totalAmount}${summary.hidden ? ` · вне радара: ${summary.hidden}` : ''}</div>${rows}<div class="prow"><button class="btn ghost" id="salvageRadarClose">Закрыть</button></div></div>`;
   panel.classList.remove('hidden');
-  panel.querySelectorAll?.('[data-salvage-focus]')?.forEach(button => {
+  const closeAfter = command => button => {
     button.addEventListener('click', () => {
-      const contact = summary.visible[Number(button.dataset.salvageFocus)];
-      if (!contact || !focusSalvageContact(win, save, contact)) return;
+      const contact = summary.visible[Number(button.dataset.salvageCourse ?? button.dataset.salvageFocus)];
+      if (!contact || !command(win, save, contact)) return;
       panel.classList.add('hidden');
       panel.innerHTML = '';
     });
-  });
+  };
+  panel.querySelectorAll?.('[data-salvage-course]')?.forEach(closeAfter(courseSalvageContact));
+  panel.querySelectorAll?.('[data-salvage-focus]')?.forEach(closeAfter(focusSalvageContact));
   doc.getElementById('salvageRadarClose')?.addEventListener('click', () => {
     panel.classList.add('hidden');
     panel.innerHTML = '';
