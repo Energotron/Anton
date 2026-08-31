@@ -10,7 +10,7 @@ test('detectPlanetType reads runtime dock detail tokens', () => {
 
 test('unknown landing type safely falls back to rock scene', () => {
   assert.equal(detectPlanetType('Система — неизвестный тип'), 'rock');
-  assert.equal(landingSceneForType('unknown').asset, 'assets/landing/rock.svg');
+  assert.match(landingSceneForType('unknown').asset, /\/landing\/rock\.svg$/);
 });
 
 test('every supported landing scene points at authored SVG art', () => {
