@@ -8,9 +8,12 @@ import {
   cargoUsed,
   getSalvageRadarContacts
 } from './salvageCore.js';
+import { serializeSalvageRecords } from './salvagePersistenceCore.js';
 
 const PATCH_FLAG = Symbol.for('kr3.salvageRuntime.patched');
+const STORAGE_READ_PATCH = '__kr3SalvageLoadWatchPatched';
 const STATE = new WeakMap();
+let LOAD_CANDIDATE = null;
 const LOOT_COLORS = {
   ore: 0x8fd3ff,
   mach: 0xffd36a,
@@ -54,7 +57,11 @@ function ensureState(renderer) {
     camX: 0,
     camY: 0,
     radarCanvas: null,
-    radarCtx: null
+    radarCtx: null,
+    currentSystemId: null,
+    knownSystemRefs: new Set(),
+    systems: {},
+    restorePending: false
   };
   STATE.set(renderer, state);
   return state;
@@ -146,16 +153,21 @@ function disposeObject(object) {
   });
 }
 
-function clearLoot(renderer) {
+function clearLootMeshes(renderer) {
   const state = ensureState(renderer);
   for (const loot of state.loot) {
     state.group.remove(loot.mesh);
     disposeObject(loot.mesh);
   }
   state.loot.length = 0;
-  state.ships.clear();
   updateBadge(renderer);
   drawRadarOverlay(renderer);
+}
+
+function clearLoot(renderer) {
+  const state = ensureState(renderer);
+  clearLootMeshes(renderer);
+  state.ships.clear();
 }
 
 function makeLootMesh(drop) {
@@ -189,29 +201,47 @@ function makeLootMesh(drop) {
   return root;
 }
 
-function spawnLoot(renderer, ship, x, y) {
-  const drop = buildSalvageDrop(ship);
-  if (!drop) return null;
+function addLootRecord(renderer, record, announce = false) {
   const state = ensureState(renderer);
-  const mesh = makeLootMesh(drop);
-  mesh.position.set(x, y, 4);
+  const mesh = makeLootMesh(record);
+  mesh.position.set(record.x, record.y, 4);
+  const id = record.id || `salvage-${state.serial++}`;
   const loot = {
-    id: `salvage-${state.serial++}`,
-    ...drop,
-    x,
-    y,
+    id,
+    goodId: record.goodId,
+    amount: record.amount,
+    sourceUid: record.sourceUid ?? null,
+    sourceType: record.sourceType || 'pirate',
+    x: record.x,
+    y: record.y,
     mesh,
     warnedFull: false,
     pulse: Math.random() * Math.PI * 2
   };
+  const serialMatch = /^salvage-(\d+)$/.exec(String(id));
+  if (serialMatch) state.serial = Math.max(state.serial, Number(serialMatch[1]) + 1);
   mesh.userData.salvageId = loot.id;
   state.group.add(mesh);
   state.loot.push(loot);
-  const good = SALVAGE_GOODS[loot.goodId];
-  notify(`🧲 Обломки: ${good?.icon || '📦'} ${good?.name || loot.goodId} ×${loot.amount}`);
+  if (announce) {
+    const good = SALVAGE_GOODS[loot.goodId];
+    notify(`🧲 Обломки: ${good?.icon || '📦'} ${good?.name || loot.goodId} ×${loot.amount}`);
+  }
   updateBadge(renderer);
   drawRadarOverlay(renderer);
   return loot;
+}
+
+function spawnLoot(renderer, ship, x, y) {
+  const drop = buildSalvageDrop(ship);
+  if (!drop) return null;
+  const state = ensureState(renderer);
+  return addLootRecord(renderer, {
+    id: `salvage-${state.serial++}`,
+    ...drop,
+    x,
+    y
+  }, true);
 }
 
 function removeLoot(renderer, loot) {
@@ -287,7 +317,70 @@ function animateLoot(renderer, dt) {
   drawRadarOverlay(renderer);
 }
 
+function snapshotCurrentSystem(renderer) {
+  const state = ensureState(renderer);
+  if (!Number.isInteger(state.currentSystemId) || state.currentSystemId < 0) return;
+  const records = serializeSalvageRecords(state.loot);
+  if (records.length) state.systems[String(state.currentSystemId)] = records;
+  else delete state.systems[String(state.currentSystemId)];
+}
+
+function restoreCurrentSystem(renderer) {
+  const state = ensureState(renderer);
+  clearLootMeshes(renderer);
+  const records = state.systems[String(state.currentSystemId)] || [];
+  for (const record of records) addLootRecord(renderer, record, false);
+  state.restorePending = false;
+}
+
+function systemMatchesRecentLoad(systemData) {
+  const candidate = LOAD_CANDIDATE;
+  LOAD_CANDIDATE = null;
+  if (!candidate || Date.now() - candidate.at > 750) return false;
+  const id = Number(systemData?.id);
+  const savedId = Number(candidate.data?.G?.sysId);
+  const savedSystem = candidate.data?.systems?.[savedId];
+  if (!Number.isInteger(id) || id !== savedId || !savedSystem) return false;
+  try { return JSON.stringify(savedSystem) === JSON.stringify(systemData); }
+  catch (_) { return false; }
+}
+
+function prepareSystemTransition(renderer, systemData) {
+  const state = ensureState(renderer);
+  const nextId = Number(systemData?.id);
+  const knownRef = state.knownSystemRefs.has(systemData);
+  const loadedWorld = systemMatchesRecentLoad(systemData);
+
+  if (loadedWorld || (nextId === 0 && state.currentSystemId !== null && !knownRef)) {
+    state.systems = {};
+    clearLootMeshes(renderer);
+  } else {
+    snapshotCurrentSystem(renderer);
+  }
+
+  if (systemData && typeof systemData === 'object') state.knownSystemRefs.add(systemData);
+  if (Number.isInteger(nextId) && nextId >= 0) state.currentSystemId = nextId;
+  state.restorePending = true;
+}
+
+function installLoadWatch(storage = globalThis?.localStorage) {
+  if (!storage) return false;
+  const proto = Object.getPrototypeOf(storage);
+  if (!proto || proto[STORAGE_READ_PATCH]) return false;
+  const previousGetItem = proto.getItem;
+  Object.defineProperty(proto, STORAGE_READ_PATCH, { value: true, configurable: true });
+  proto.getItem = function patchedSalvageLoadWatch(key) {
+    const raw = previousGetItem.call(this, key);
+    if (this === storage && /^kr3_save_slot\d+$/.test(String(key || '')) && typeof raw === 'string') {
+      try { LOAD_CANDIDATE = { data: JSON.parse(raw), at: Date.now() }; } catch (_) {}
+    }
+    return raw;
+  };
+  return true;
+}
+
 export function installSalvageRuntime() {
+  installLoadWatch();
   const proto = WebGLRenderer.prototype;
   if (proto[PATCH_FLAG]) return false;
   Object.defineProperty(proto, PATCH_FLAG, { value: true, configurable: false });
@@ -298,6 +391,7 @@ export function installSalvageRuntime() {
   const originalSetCameraTarget = proto.setCameraTarget;
   const originalUpdate = proto.update;
   const originalClearShips = proto.clearShips;
+  const originalBuildSystemFromData = proto.buildSystemFromData;
 
   proto.addShip = function patchedAddShip(ship) {
     const state = ensureState(this);
@@ -319,7 +413,14 @@ export function installSalvageRuntime() {
     return result;
   };
 
+  proto.buildSystemFromData = function patchedBuildSystemFromData(systemData) {
+    prepareSystemTransition(this, systemData);
+    return originalBuildSystemFromData.call(this, systemData);
+  };
+
   proto.setPlayer = function patchedSetPlayer(player) {
+    const state = ensureState(this);
+    if (state.restorePending && Number.isInteger(state.currentSystemId)) restoreCurrentSystem(this);
     const result = originalSetPlayer.call(this, player);
     if (player) collectNearby(this, player);
     return result;
