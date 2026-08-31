@@ -12,7 +12,7 @@
   "sourceOfTruth": {
     "provider": "github",
     "branch": "master",
-    "headSha": "33b5a17771bf5d057c67868072ff7f5bb7b2734c",
+    "runtimeHeadShaAtBridgeInit": "33b5a17771bf5d057c67868072ff7f5bb7b2734c",
     "releaseDecisionPath": ".github/release-decision.json",
     "release": false,
     "latestRelease": "v0.3.9-alpha"
@@ -40,9 +40,9 @@
     "type": "mesh.integration",
     "visibility": "internal",
     "title": "QuantDeus Mesh bridge initialized",
-    "summary": "GitHub master is the canonical KR3 source of truth and the QuantDeus Wix CMS now mirrors the canonical project state.",
+    "summary": "GitHub master is the canonical KR3 source of truth and the QuantDeus Wix CMS now mirrors canonical public-safe project state.",
     "provenance": {
-      "headSha": "33b5a17771bf5d057c67868072ff7f5bb7b2734c",
+      "runtimeHeadShaAtBridgeInit": "33b5a17771bf5d057c67868072ff7f5bb7b2734c",
       "runtime": "game/webgl",
       "wixRecordId": "kr3-canonical"
     }
