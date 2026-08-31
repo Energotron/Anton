@@ -47,3 +47,15 @@ export function createSalvagePersistence(systemEntries = {}) {
     systems: systemEntries
   });
 }
+
+export function attachSalvagePersistenceToSave(saveData, persistence) {
+  if (!saveData || typeof saveData !== 'object' || Array.isArray(saveData)) return saveData;
+  return {
+    ...saveData,
+    salvagePersistence: normalizeSalvagePersistence(persistence)
+  };
+}
+
+export function extractSalvagePersistenceFromSave(saveData) {
+  return normalizeSalvagePersistence(saveData?.salvagePersistence);
+}

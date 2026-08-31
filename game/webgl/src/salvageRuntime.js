@@ -8,12 +8,19 @@ import {
   cargoUsed,
   getSalvageRadarContacts
 } from './salvageCore.js';
-import { serializeSalvageRecords } from './salvagePersistenceCore.js';
+import {
+  attachSalvagePersistenceToSave,
+  createSalvagePersistence,
+  extractSalvagePersistenceFromSave,
+  serializeSalvageRecords
+} from './salvagePersistenceCore.js';
 
 const PATCH_FLAG = Symbol.for('kr3.salvageRuntime.patched');
 const STORAGE_READ_PATCH = '__kr3SalvageLoadWatchPatched';
+const STORAGE_WRITE_PATCH = '__kr3SalvageSaveWatchPatched';
 const STATE = new WeakMap();
 let LOAD_CANDIDATE = null;
+let ACTIVE_RENDERER = null;
 const LOOT_COLORS = {
   ore: 0x8fd3ff,
   mach: 0xffd36a,
@@ -42,6 +49,7 @@ function notify(message, cls = '') {
 }
 
 function ensureState(renderer) {
+  ACTIVE_RENDERER = renderer || ACTIVE_RENDERER;
   let state = STATE.get(renderer);
   if (state) return state;
   const group = new THREE.Group();
@@ -333,25 +341,28 @@ function restoreCurrentSystem(renderer) {
   state.restorePending = false;
 }
 
-function systemMatchesRecentLoad(systemData) {
+function takeRecentLoad(systemData) {
   const candidate = LOAD_CANDIDATE;
   LOAD_CANDIDATE = null;
-  if (!candidate || Date.now() - candidate.at > 750) return false;
+  if (!candidate || Date.now() - candidate.at > 750) return null;
   const id = Number(systemData?.id);
   const savedId = Number(candidate.data?.G?.sysId);
   const savedSystem = candidate.data?.systems?.[savedId];
-  if (!Number.isInteger(id) || id !== savedId || !savedSystem) return false;
-  try { return JSON.stringify(savedSystem) === JSON.stringify(systemData); }
-  catch (_) { return false; }
+  if (!Number.isInteger(id) || id !== savedId || !savedSystem) return null;
+  try { return JSON.stringify(savedSystem) === JSON.stringify(systemData) ? candidate.data : null; }
+  catch (_) { return null; }
 }
 
 function prepareSystemTransition(renderer, systemData) {
   const state = ensureState(renderer);
   const nextId = Number(systemData?.id);
   const knownRef = state.knownSystemRefs.has(systemData);
-  const loadedWorld = systemMatchesRecentLoad(systemData);
+  const loadedSave = takeRecentLoad(systemData);
 
-  if (loadedWorld || (nextId === 0 && state.currentSystemId !== null && !knownRef)) {
+  if (loadedSave) {
+    state.systems = extractSalvagePersistenceFromSave(loadedSave).systems;
+    clearLootMeshes(renderer);
+  } else if (nextId === 0 && state.currentSystemId !== null && !knownRef) {
     state.systems = {};
     clearLootMeshes(renderer);
   } else {
@@ -379,8 +390,34 @@ function installLoadWatch(storage = globalThis?.localStorage) {
   return true;
 }
 
+function installSaveWatch(storage = globalThis?.localStorage) {
+  if (!storage) return false;
+  const proto = Object.getPrototypeOf(storage);
+  if (!proto || proto[STORAGE_WRITE_PATCH]) return false;
+  const previousSetItem = proto.setItem;
+  Object.defineProperty(proto, STORAGE_WRITE_PATCH, { value: true, configurable: true });
+  proto.setItem = function patchedSalvageSaveWatch(key, value) {
+    let nextValue = value;
+    if (this === storage && ACTIVE_RENDERER && /^kr3_save_slot\d+$/.test(String(key || '')) && typeof value === 'string') {
+      try {
+        const saveData = JSON.parse(value);
+        const savedAt = Number(saveData?.savedAt);
+        if (Number.isFinite(savedAt) && Math.abs(Date.now() - savedAt) <= 1500) {
+          snapshotCurrentSystem(ACTIVE_RENDERER);
+          const state = ensureState(ACTIVE_RENDERER);
+          const persistence = createSalvagePersistence(state.systems);
+          nextValue = JSON.stringify(attachSalvagePersistenceToSave(saveData, persistence));
+        }
+      } catch (_) {}
+    }
+    return previousSetItem.call(this, key, nextValue);
+  };
+  return true;
+}
+
 export function installSalvageRuntime() {
   installLoadWatch();
+  installSaveWatch();
   const proto = WebGLRenderer.prototype;
   if (proto[PATCH_FLAG]) return false;
   Object.defineProperty(proto, PATCH_FLAG, { value: true, configurable: false });
