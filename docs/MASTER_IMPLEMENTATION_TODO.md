@@ -9,6 +9,16 @@ Status: canonical long-term implementation queue for humans and AI agents. Read 
 - [ ] Solo campaign remains primary; online is a separate later track.
 - [ ] Z-mechanic remains a core pillar: normal space → deep hyperspace → black-hole shadow worlds.
 
+## System camera and minimap navigation
+
+- [ ] Implement true free camera movement across the **entire current star system** instead of keeping the camera effectively locked near the player.
+- [ ] The minimap must be a real navigation/control surface, not decorative UI: click/tap a point or object to pan/focus the main camera there.
+- [ ] Support smooth pan/drag, edge-safe bounds, zoom where practical, and a one-action return-to-player / follow-camera mode.
+- [ ] Camera must be able to inspect planets, stations, NPC ships, debris fields, pickups, combat and distant points of interest without forcing the player's ship to move there first.
+- [ ] Minimap markers should represent actionable system objects and remain synchronized with the main camera viewport/focus.
+- [ ] Preserve mobile usability: touch drag/pinch or equivalent controls must not conflict with ship movement/selection.
+- [ ] Camera state may be saved as convenience state, but loading must always recover safely if coordinates are invalid after world-state changes.
+
 ## Visual asset strategy — stop relying on procedural-only presentation
 
 - [ ] Replace placeholder/procedural-only presentation with authored or properly licensed original assets wherever feasible.
@@ -118,14 +128,15 @@ Do not copy copyrighted text/assets verbatim. Translate mechanics into original 
 
 1. Fix/maintain canonical WebGL runtime stability.
 2. Correct campaign date to 3550-01-01 and keep save compatibility.
-3. Build communication + space pickup/salvage loop.
-4. Build landing/station scene framework with race-aware backgrounds/music.
-5. Build planets/governments/station services.
-6. Build text-quest engine and authored vertical-slice quests.
-7. Deepen Smart Diplomacy and NPC memory.
-8. Add hyper arcade mode and first Keller/Z-mechanic mission.
-9. Add black-hole shadow-world mode.
-10. Expand war layer, planetary battles and remaining SRHD/mod parity.
+3. Make full-system free camera + functional minimap navigation a real gameplay control layer.
+4. Build communication + space pickup/salvage loop.
+5. Build landing/station scene framework with race-aware backgrounds/music.
+6. Build planets/governments/station services.
+7. Build text-quest engine and authored vertical-slice quests.
+8. Deepen Smart Diplomacy and NPC memory.
+9. Add hyper arcade mode and first Keller/Z-mechanic mission.
+10. Add black-hole shadow-world mode.
+11. Expand war layer, planetary battles and remaining SRHD/mod parity.
 
 ## Definition of done
 
