@@ -1,8 +1,8 @@
 export const LANDING_SCENES = Object.freeze({
-  rock: { asset: 'assets/landing/rock.svg', title: 'Каменистый мир', ambience: 'Пыльный космопорт' },
-  ice: { asset: 'assets/landing/ice.svg', title: 'Ледяной мир', ambience: 'Полярный космопорт' },
-  lava: { asset: 'assets/landing/lava.svg', title: 'Вулканический мир', ambience: 'Термальный космопорт' },
-  tech: { asset: 'assets/landing/tech.svg', title: 'Высокотехнологичный мир', ambience: 'Мегаполис-узел' }
+  rock: { asset: new URL('../assets/landing/rock.svg', import.meta.url).href, title: 'Каменистый мир', ambience: 'Пыльный космопорт' },
+  ice: { asset: new URL('../assets/landing/ice.svg', import.meta.url).href, title: 'Ледяной мир', ambience: 'Полярный космопорт' },
+  lava: { asset: new URL('../assets/landing/lava.svg', import.meta.url).href, title: 'Вулканический мир', ambience: 'Термальный космопорт' },
+  tech: { asset: new URL('../assets/landing/tech.svg', import.meta.url).href, title: 'Высокотехнологичный мир', ambience: 'Мегаполис-узел' }
 });
 
 export function detectPlanetType(text = '') {
