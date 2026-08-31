@@ -224,7 +224,7 @@ Expose a data-driven advanced setup panel covering at minimum:
 - [ ] Micromodule storage/management.
 - [ ] Fast configuration presets.
 - [ ] Better space item/junk visibility.
-- [ ] Contextual tooltips explaining derived stats and effects.
+- [x] Contextual tooltips explaining derived stats and effects.
 - [ ] Mod-like modular feature flags in developer/data configuration so systems remain independently testable.
 
 ## O. KR3-only extension rule
