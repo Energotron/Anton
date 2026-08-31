@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "id": "kr3-children-of-eltan",
+    "name": "Space Rangers 3: Children of Eltan",
+    "repository": "Energotron/space_rangers3",
+    "canonicalBranch": "master",
+    "canonicalRuntime": "game/webgl",
+    "runtimeBaseline": "v0.3.9",
+    "campaignStart": "3550-01-01"
+  },
+  "sourceOfTruth": {
+    "provider": "github",
+    "branch": "master",
+    "headSha": "33b5a17771bf5d057c67868072ff7f5bb7b2734c",
+    "releaseDecisionPath": ".github/release-decision.json",
+    "release": false,
+    "latestRelease": "v0.3.9-alpha"
+  },
+  "mesh": {
+    "status": "active",
+    "publicPortal": "https://elektron2345.wixsite.com/quantdeus",
+    "wixSiteId": "699629f7-f78f-4473-9f66-0a34a0e6da39",
+    "wixCollectionId": "quantdeus-mesh-project-state",
+    "wixRecordId": "kr3-canonical",
+    "syncMode": "agent-coordinated",
+    "publicRead": true,
+    "adminWrite": true
+  },
+  "capabilities": {
+    "githubStateFeed": true,
+    "wixCmsMirror": true,
+    "milestoneEvents": true,
+    "releaseGatedPublishing": true,
+    "assetPipeline": "planned",
+    "audioRoutingFeed": "planned",
+    "telemetry": "planned"
+  },
+  "currentMilestone": {
+    "type": "mesh.integration",
+    "visibility": "internal",
+    "title": "QuantDeus Mesh bridge initialized",
+    "summary": "GitHub master is the canonical KR3 source of truth and the QuantDeus Wix CMS now mirrors the canonical project state.",
+    "provenance": {
+      "headSha": "33b5a17771bf5d057c67868072ff7f5bb7b2734c",
+      "runtime": "game/webgl",
+      "wixRecordId": "kr3-canonical"
+    }
+  },
+  "updatedAt": "2026-08-31T09:12:59Z"
+}
