@@ -3,6 +3,17 @@ export const SUPPORT_MIN_REPUTATION = 20;
 export const SUPPORT_REPUTATION_COST = 2;
 export const SUPPORT_FUEL = 15;
 export const SUPPORT_COOLDOWN_TURNS = 5;
+export const MALOKI_CREDIT_GRANT = 1500;
+export const MALOKI_REPUTATION_COST = 3;
+export const MALOKI_COOLDOWN_TURNS = 6;
+export const PELENG_REPUTATION_COST = 2;
+export const PELENG_COOLDOWN_TURNS = 5;
+
+export const DIPLOMACY_SERVICES = Object.freeze({
+  fed: Object.freeze({ id: 'fuel', label: 'Экстренная логистика', reputationMin: 20, reputationCost: SUPPORT_REPUTATION_COST, cooldownTurns: SUPPORT_COOLDOWN_TURNS }),
+  mal: Object.freeze({ id: 'credits', label: 'Боевой аванс', reputationMin: 20, reputationCost: MALOKI_REPUTATION_COST, cooldownTurns: MALOKI_COOLDOWN_TURNS }),
+  pel: Object.freeze({ id: 'intel', label: 'Навигационная разведка', reputationMin: 20, reputationCost: PELENG_REPUTATION_COST, cooldownTurns: PELENG_COOLDOWN_TURNS }),
+});
 
 function finiteNumber(value, fallback = 0) {
   const n = Number(value);
@@ -19,10 +30,15 @@ function cloneSave(save) {
     },
     G: {
       ...(save.G || {}),
+      visited: Array.isArray(save.G?.visited) ? [...save.G.visited] : [],
       diplomacySupportUntil: { ...(save.G?.diplomacySupportUntil || {}) },
     },
-    systems: Array.isArray(save.systems) ? save.systems.map(s => ({ ...s })) : [],
+    systems: Array.isArray(save.systems) ? save.systems.map(s => ({ ...s, links: Array.isArray(s?.links) ? [...s.links] : s?.links })) : [],
   };
+}
+
+export function diplomacyServiceForFaction(faction) {
+  return DIPLOMACY_SERVICES[faction] || null;
 }
 
 export function currentFactionContext(save = null) {
@@ -32,6 +48,7 @@ export function currentFactionContext(save = null) {
   const system = systems.find(s => s && Number(s.id) === systemId);
   const faction = system?.fac;
   if (!faction) return null;
+  const service = diplomacyServiceForFaction(faction);
   const reputation = Math.trunc(finiteNumber(save.P?.rep?.[faction]));
   const turn = Math.max(0, Math.trunc(finiteNumber(save.G?.turn)));
   const cooldownUntil = Math.max(0, Math.trunc(finiteNumber(save.G?.diplomacySupportUntil?.[faction])));
@@ -43,22 +60,35 @@ export function currentFactionContext(save = null) {
     turn,
     cooldownUntil,
     cooldownRemaining: Math.max(0, cooldownUntil - turn),
+    service,
   };
+}
+
+function nextPelengIntelTarget(save, context) {
+  const current = save?.systems?.find?.(s => s && Number(s.id) === context?.systemId);
+  const links = Array.isArray(current?.links) ? current.links.map(v => Math.trunc(finiteNumber(v, -1))).filter(v => v >= 0) : [];
+  const visited = new Set((Array.isArray(save?.G?.visited) ? save.G.visited : []).map(v => Math.trunc(finiteNumber(v, -1))));
+  return links.find(id => !visited.has(id)) ?? null;
 }
 
 export function diplomaticSupportAvailability(save = null) {
   const context = currentFactionContext(save);
   if (!context) return { available: false, reason: 'no_faction', context };
-  if (context.reputation < SUPPORT_MIN_REPUTATION) {
+  const service = context.service;
+  if (!service) return { available: false, reason: 'no_service', context };
+  if (context.reputation < service.reputationMin) {
     return { available: false, reason: 'reputation', context };
   }
   if (context.cooldownRemaining > 0) {
     return { available: false, reason: 'cooldown', context };
   }
-  const fuel = finiteNumber(save.P?.fuel);
-  const maxFuel = Math.max(0, finiteNumber(save.P?.maxFuel));
-  if (maxFuel <= 0 || fuel >= maxFuel) {
-    return { available: false, reason: 'fuel_full', context };
+  if (service.id === 'fuel') {
+    const fuel = finiteNumber(save.P?.fuel);
+    const maxFuel = Math.max(0, finiteNumber(save.P?.maxFuel));
+    if (maxFuel <= 0 || fuel >= maxFuel) return { available: false, reason: 'fuel_full', context };
+  }
+  if (service.id === 'intel' && nextPelengIntelTarget(save, context) === null) {
+    return { available: false, reason: 'intel_complete', context };
   }
   return { available: true, reason: 'ok', context };
 }
@@ -68,23 +98,35 @@ export function applyDiplomaticSupport(save = null) {
   if (!availability.available) return { changed: false, ...availability, save };
 
   const next = cloneSave(save);
-  const { faction, turn } = availability.context;
-  const fuel = finiteNumber(next.P.fuel);
-  const maxFuel = Math.max(0, finiteNumber(next.P.maxFuel));
-  const grantedFuel = Math.max(0, Math.min(SUPPORT_FUEL, maxFuel - fuel));
-  next.P.fuel = fuel + grantedFuel;
-  next.P.rep[faction] = Math.trunc(finiteNumber(next.P.rep[faction])) - SUPPORT_REPUTATION_COST;
-  next.G.diplomacySupportUntil[faction] = turn + SUPPORT_COOLDOWN_TURNS;
-
-  return {
+  const { faction, turn, service } = availability.context;
+  const outcome = {
     changed: true,
     reason: 'granted',
     faction,
-    grantedFuel,
-    reputationDelta: -SUPPORT_REPUTATION_COST,
-    cooldownUntil: turn + SUPPORT_COOLDOWN_TURNS,
+    serviceId: service.id,
+    reputationDelta: -service.reputationCost,
+    cooldownUntil: turn + service.cooldownTurns,
     save: next,
   };
+
+  if (service.id === 'fuel') {
+    const fuel = finiteNumber(next.P.fuel);
+    const maxFuel = Math.max(0, finiteNumber(next.P.maxFuel));
+    outcome.grantedFuel = Math.max(0, Math.min(SUPPORT_FUEL, maxFuel - fuel));
+    next.P.fuel = fuel + outcome.grantedFuel;
+  } else if (service.id === 'credits') {
+    next.P.money = Math.max(0, Math.trunc(finiteNumber(next.P.money))) + MALOKI_CREDIT_GRANT;
+    outcome.grantedCredits = MALOKI_CREDIT_GRANT;
+  } else if (service.id === 'intel') {
+    const revealedSystemId = nextPelengIntelTarget(next, availability.context);
+    if (!next.G.visited.includes(revealedSystemId)) next.G.visited.push(revealedSystemId);
+    outcome.revealedSystemId = revealedSystemId;
+    outcome.revealedSystemName = next.systems.find(s => Number(s?.id) === revealedSystemId)?.name || `Система ${revealedSystemId}`;
+  }
+
+  next.P.rep[faction] = Math.trunc(finiteNumber(next.P.rep[faction])) - service.reputationCost;
+  next.G.diplomacySupportUntil[faction] = turn + service.cooldownTurns;
+  return outcome;
 }
 
 function readSave(storage) {
@@ -106,16 +148,24 @@ function factionName(id) {
   })[id] || id || 'Неизвестная сторона';
 }
 
+function supportOfferText(context) {
+  if (!context?.service) return 'Эта сторона пока не предоставляет стандартных дипломатических услуг.';
+  if (context.service.id === 'fuel') return `Экстренная логистика: до +${SUPPORT_FUEL} топлива за ${context.service.reputationCost} очка репутации.`;
+  if (context.service.id === 'credits') return `Боевой аванс: +${MALOKI_CREDIT_GRANT} кредитов за ${context.service.reputationCost} очка репутации.`;
+  if (context.service.id === 'intel') return `Навигационная разведка: раскрыть соседнюю систему за ${context.service.reputationCost} очка репутации.`;
+  return context.service.label;
+}
+
 function supportStatusText(availability) {
   const context = availability?.context;
   if (!context) return 'В этой системе нет доступного дипломатического канала.';
   const base = `${factionName(context.faction)} · репутация ${context.reputation >= 0 ? '+' : ''}${context.reputation}`;
-  if (availability.available) {
-    return `${base}\nДоверие позволяет запросить экстренную топливную поддержку: +${SUPPORT_FUEL} топлива за ${SUPPORT_REPUTATION_COST} очка репутации.`;
-  }
-  if (availability.reason === 'reputation') return `${base}\nНужно доверие не ниже +${SUPPORT_MIN_REPUTATION}, чтобы администрация одобрила поддержку.`;
-  if (availability.reason === 'cooldown') return `${base}\nКанал поддержки восстановится через ${context.cooldownRemaining} ход.`;
+  if (availability.available) return `${base}\n${supportOfferText(context)}`;
+  if (availability.reason === 'no_service') return `${base}\n${supportOfferText(context)}`;
+  if (availability.reason === 'reputation') return `${base}\nНужно доверие не ниже +${context.service.reputationMin}. ${supportOfferText(context)}`;
+  if (availability.reason === 'cooldown') return `${base}\nКанал «${context.service.label}» восстановится через ${context.cooldownRemaining} ход.`;
   if (availability.reason === 'fuel_full') return `${base}\nТопливные баки уже заполнены.`;
+  if (availability.reason === 'intel_complete') return `${base}\nВсе соседние системы уже внесены в навигационную базу.`;
   return `${base}\nПоддержка сейчас недоступна.`;
 }
 
@@ -134,7 +184,8 @@ function showDiplomacyPanel(win = globalThis?.window) {
   const current = readSave(win.localStorage);
   const availability = diplomaticSupportAvailability(current);
   const disabled = availability.available ? '' : ' disabled';
-  panel.innerHTML = `<div class="pbox"><h2>🤝 Дипломатический канал</h2><div class="sub">Локальные отношения дают реальные услуги и ограничения</div><div class="evTxt" style="white-space:pre-line">${supportStatusText(availability)}</div><div class="prow"><button class="btn" id="diplomacySupport"${disabled}>Запросить поддержку</button><button class="btn ghost" id="diplomacyClose">Закрыть</button></div></div>`;
+  const actionLabel = availability.context?.service?.label || 'Запросить поддержку';
+  panel.innerHTML = `<div class="pbox"><h2>🤝 Дипломатический канал</h2><div class="sub">У каждой фракции свои услуги, цена доверия и период восстановления</div><div class="evTxt" style="white-space:pre-line">${supportStatusText(availability)}</div><div class="prow"><button class="btn" id="diplomacySupport"${disabled}>${actionLabel}</button><button class="btn ghost" id="diplomacyClose">Закрыть</button></div></div>`;
   panel.classList.remove('hidden');
 
   doc.getElementById('diplomacyClose')?.addEventListener('click', () => {
