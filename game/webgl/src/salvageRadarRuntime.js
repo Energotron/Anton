@@ -1,4 +1,4 @@
-import { buildSalvageRadarSummary } from './salvageRadarIntel.js';
+import { buildSalvageRadarSummary, salvageContactToMinimapPoint } from './salvageRadarIntel.js';
 
 const SAVE_KEY = 'kr3_save_slot0';
 
@@ -24,19 +24,52 @@ function readLiveSave(win) {
   }
 }
 
+export function focusSalvageContact(win = globalThis?.window, save = null, contact = null) {
+  const doc = win?.document;
+  const minimap = doc?.getElementById?.('mm');
+  const point = salvageContactToMinimapPoint(save, contact);
+  if (!minimap || !point) return false;
+
+  doc.getElementById?.('ctxCam')?.click?.();
+  const rect = minimap.getBoundingClientRect?.();
+  if (!rect || rect.width <= 0 || rect.height <= 0 || typeof win?.PointerEvent !== 'function') return false;
+  const event = new win.PointerEvent('pointerdown', {
+    bubbles: true,
+    cancelable: true,
+    clientX: rect.left + (point.x / 264) * rect.width,
+    clientY: rect.top + (point.y / 264) * rect.height,
+    pointerId: 1,
+    pointerType: 'mouse',
+    button: 0,
+    buttons: 1,
+    shiftKey: true,
+  });
+  minimap.dispatchEvent(event);
+  return true;
+}
+
 export function showSalvageRadarPanel(win = globalThis?.window) {
   const doc = win?.document;
   const panel = doc?.getElementById?.('panel');
   if (!panel) return false;
-  const summary = buildSalvageRadarSummary(readLiveSave(win));
+  const save = readLiveSave(win);
+  const summary = buildSalvageRadarSummary(save);
   const rows = summary.visible.length
-    ? summary.visible.map(contact => `<div class="evTxt" style="margin:6px 0"><b>🧲 ${esc(contact.goodName)} ×${contact.amount}</b> · ${contact.distance} м · ${esc(contact.bearing)}${contact.sourceType ? ` · обломки ${esc(contact.sourceType)}` : ''}</div>`).join('')
+    ? summary.visible.map((contact, index) => `<div class="evTxt" style="margin:6px 0"><b>🧲 ${esc(contact.goodName)} ×${contact.amount}</b> · ${contact.distance} м · ${esc(contact.bearing)}${contact.sourceType ? ` · обломки ${esc(contact.sourceType)}` : ''} <button class="mini" type="button" data-salvage-focus="${index}">📷 Фокус</button></div>`).join('')
     : '<div class="evTxt">В пределах радара нет сохранённых обломков.</div>';
   const nearest = summary.nearest
     ? `Ближайший контакт: ${esc(summary.nearest.goodName)} ×${summary.nearest.amount}, ${summary.nearest.distance} м, курс ${esc(summary.nearest.bearing)}.`
     : 'Радар не видит доступного salvage.';
   panel.innerHTML = `<div class="pbox"><h2>🧲 Радар обломков</h2><div class="sub">Локационная сводка по сохранённому salvage текущей системы.</div><div class="evTxt" style="margin-top:10px">${nearest}<br>В зоне радара: ${summary.visible.length} · единиц груза: ${summary.totalAmount}${summary.hidden ? ` · вне радара: ${summary.hidden}` : ''}</div>${rows}<div class="prow"><button class="btn ghost" id="salvageRadarClose">Закрыть</button></div></div>`;
   panel.classList.remove('hidden');
+  panel.querySelectorAll?.('[data-salvage-focus]')?.forEach(button => {
+    button.addEventListener('click', () => {
+      const contact = summary.visible[Number(button.dataset.salvageFocus)];
+      if (!contact || !focusSalvageContact(win, save, contact)) return;
+      panel.classList.add('hidden');
+      panel.innerHTML = '';
+    });
+  });
   doc.getElementById('salvageRadarClose')?.addEventListener('click', () => {
     panel.classList.add('hidden');
     panel.innerHTML = '';

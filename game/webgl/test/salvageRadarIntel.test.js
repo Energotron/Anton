@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSalvageRadarSummary, listSalvageRadarContacts } from '../src/salvageRadarIntel.js';
+import { buildSalvageRadarSummary, listSalvageRadarContacts, salvageContactToMinimapPoint } from '../src/salvageRadarIntel.js';
 
 function saveWith(records, radar = 500) {
   return {
@@ -49,4 +49,16 @@ test('invalid, exhausted and unsupported salvage entries are ignored safely', ()
     { goodId: 'weap', amount: 1, x: 'bad', y: 1 }
   ]));
   assert.deepEqual(contacts, []);
+});
+
+test('maps a visible salvage contact onto the canonical 264px minimap space', () => {
+  const save = saveWith([], 700);
+  const point = salvageContactToMinimapPoint(save, { x: 350, y: -175 });
+  assert.deepEqual(point, { x: 192, y: 102 });
+});
+
+test('rejects malformed or off-minimap salvage navigation points', () => {
+  const save = saveWith([], 700);
+  assert.equal(salvageContactToMinimapPoint(save, { x: 'bad', y: 0 }), null);
+  assert.equal(salvageContactToMinimapPoint(save, { x: 1000, y: 0 }), null);
 });

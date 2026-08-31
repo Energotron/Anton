@@ -52,6 +52,19 @@ export function listSalvageRadarContacts(save = null) {
     .sort((a, b) => Number(b.inRadar) - Number(a.inRadar) || a.distance - b.distance || a.goodId.localeCompare(b.goodId));
 }
 
+export function salvageContactToMinimapPoint(save = null, contact = null) {
+  const player = save?.P;
+  const x = finite(contact?.x, NaN);
+  const y = finite(contact?.y, NaN);
+  const px = finite(player?.x, NaN);
+  const py = finite(player?.y, NaN);
+  if (![x, y, px, py].every(Number.isFinite)) return null;
+  const radar = Math.max(700, finite(player?.radar, 900) || 900);
+  const scale = 120 / radar;
+  const point = { x: 132 + (x - px) * scale, y: 132 + (y - py) * scale };
+  return Math.hypot(point.x - 132, point.y - 132) <= 124 ? point : null;
+}
+
 export function buildSalvageRadarSummary(save = null) {
   const contacts = listSalvageRadarContacts(save);
   const visible = contacts.filter(c => c.inRadar);
