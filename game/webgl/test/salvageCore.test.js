@@ -5,6 +5,7 @@ import {
   buildSalvageDrop,
   cargoFree,
   cargoUsed,
+  getSalvageRadarContacts,
   planSalvagePickup
 } from '../src/salvageCore.js';
 
@@ -24,6 +25,24 @@ test('buildSalvageDrop only creates loot for pirate faction ships', () => {
     buildSalvageDrop({ uid: 8, fac: 'pir', type: 'raider' }, 0, 0.999),
     { goodId: 'weap', amount: 4, sourceUid: 8, sourceType: 'raider' }
   );
+});
+
+test('salvage radar contacts include only live drops inside scanner range and sort nearest first', () => {
+  const player = { x: 100, y: 50, radar: 300 };
+  const contacts = getSalvageRadarContacts(player, [
+    { id: 'far', goodId: 'ore', amount: 2, x: 500, y: 50 },
+    { id: 'near', goodId: 'mach', amount: 1, x: 130, y: 90 },
+    { id: 'mid', goodId: 'weap', amount: 3, x: 250, y: 50 },
+    { id: 'empty', goodId: 'ore', amount: 0, x: 110, y: 50 }
+  ]);
+  assert.deepEqual(contacts.map(item => item.id), ['near', 'mid']);
+  assert.equal(Math.round(contacts[0].distance), 50);
+  assert.equal(contacts[1].amount, 3);
+});
+
+test('salvage radar contacts safely reject invalid player/radar state', () => {
+  assert.deepEqual(getSalvageRadarContacts({ x: 0, y: 0, radar: 0 }, [{ amount: 1, x: 1, y: 1 }]), []);
+  assert.deepEqual(getSalvageRadarContacts({ x: 'bad', y: 0, radar: 500 }, [{ amount: 1, x: 1, y: 1 }]), []);
 });
 
 test('applySalvagePickup transfers loot into cargo and consumes the drop', () => {
