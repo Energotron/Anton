@@ -27,7 +27,7 @@
       </div>
       <div id="tr">
         <canvas id="mm" width="264" height="264"></canvas>
-        <div id="trBtns"><button id="sndBtn">🔊</button><button id="menuBtn">☰</button></div>
+        <div id="trBtns"><button id="sndBtn" title="Выключить звук" aria-label="Звук включён. Нажмите, чтобы выключить.">🔊</button><button id="menuBtn">☰</button></div>
       </div>
       <div id="phase">—</div>
       <div id="questLog"></div>
@@ -51,7 +51,7 @@
         <button class="mbtn" id="btnNewGame" type="button">▶ НОВАЯ ИГРА</button>
         <button class="mbtn" id="contBtn" style="display:none">💾 ПРОДОЛЖИТЬ</button>
         <button class="mbtn ghost" id="btnHelp">🎮 КАК ИГРАТЬ</button>
-        <div class="ver">v3.9 · камера · сейвы · инфоцентр · спавн с планет</div>
+        <div class="ver">v3.9 · камера · 5 слотов сейвов · инфоцентр · спавн с планет</div>
       </div>
     </div>
     <div id="rotHint" class="hidden">🔄 Переверните телефон горизонтально</div>
@@ -66,6 +66,9 @@
     }
   }
   </script>
+  <!-- Runtime guards must load before main.js so browser audio/save APIs are wrapped safely. -->
+  <script type="module" src="src/audioRuntimeGuard.js"></script>
+  <script type="module" src="src/saveSlotsRuntime.js"></script>
   <!-- Точка входа — отдельный JS-файл -->
   <script type="module" src="js/main.js"></script>
   <script type="module" src="src/careerHistory.js"></script>
