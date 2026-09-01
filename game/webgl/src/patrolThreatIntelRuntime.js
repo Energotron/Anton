@@ -10,6 +10,11 @@ function bearingLabel(dx, dy) {
   return labels[(octant + 8) % 8];
 }
 
+function reportDistance(distance, inPlayerRadar) {
+  if (inPlayerRadar) return distance;
+  return Math.max(100, Math.round(distance / 100) * 100);
+}
+
 export function buildPatrolThreatIntel(save = null) {
   if (!save || typeof save !== 'object') return null;
   const player = save.P || {};
@@ -27,12 +32,15 @@ export function buildPatrolThreatIntel(save = null) {
       const dx = x - px;
       const dy = y - py;
       const distance = Math.round(Math.hypot(dx, dy));
+      const inPlayerRadar = radar > 0 && distance <= radar;
       return {
         uid: ship.uid ?? null,
         type: ship.type === 'raider' ? 'raider' : 'pirate',
         distance,
+        reportedDistance: reportDistance(distance, inPlayerRadar),
+        distanceAccuracy: inPlayerRadar ? 'exact' : 'estimated',
         bearing: bearingLabel(dx, dy),
-        inPlayerRadar: radar > 0 && distance <= radar,
+        inPlayerRadar,
       };
     })
     .sort((a, b) => a.distance - b.distance || finite(a.uid) - finite(b.uid));
@@ -44,8 +52,11 @@ export function buildPatrolThreatIntel(save = null) {
   const nearestSource = nearest
     ? (nearest.inPlayerRadar ? 'подтверждено вашим радаром' : 'вне вашего радара, по данным патруля')
     : '';
+  const nearestDistance = nearest
+    ? `${nearest.distanceAccuracy === 'estimated' ? 'примерно ' : ''}${nearest.reportedDistance} м`
+    : '';
   const text = nearest
-    ? `Тактическая сводка патруля: пиратских контактов ${contacts.length}, рейдеров ${raiders}. Ваш радар подтверждает ${sensorConfirmed}, ещё ${patrolOnly} переданы патрулём. Ближайшая угроза — ${nearest.type === 'raider' ? 'рейдер' : 'пират'}, ${nearest.distance} м, направление ${nearest.bearing}; ${nearestSource}.`
+    ? `Тактическая сводка патруля: пиратских контактов ${contacts.length}, рейдеров ${raiders}. Ваш радар подтверждает ${sensorConfirmed}, ещё ${patrolOnly} переданы патрулём. Ближайшая угроза — ${nearest.type === 'raider' ? 'рейдер' : 'пират'}, ${nearestDistance}, направление ${nearest.bearing}; ${nearestSource}.`
     : 'Тактическая сводка патруля: активных пиратских контактов в системе не обнаружено.';
 
   return { contacts, count: contacts.length, raiders, sensorConfirmed, patrolOnly, nearest, text };
