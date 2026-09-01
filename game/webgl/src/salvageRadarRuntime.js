@@ -63,12 +63,17 @@ export function showSalvageRadarPanel(win = globalThis?.window) {
   const save = readLiveSave(win);
   const summary = buildSalvageRadarSummary(save);
   const rows = summary.visible.length
-    ? summary.visible.map((contact, index) => `<div class="evTxt" style="margin:6px 0"><b>🧲 ${esc(contact.goodName)} ×${contact.amount}</b> · ${contact.distance} м · ${esc(contact.bearing)}${contact.sourceType ? ` · обломки ${esc(contact.sourceType)}` : ''} <button class="mini" type="button" data-salvage-course="${index}">📍 Курс</button> <button class="mini" type="button" data-salvage-focus="${index}">📷 Фокус</button></div>`).join('')
+    ? summary.visible.map((contact, index) => {
+      const pickup = contact.pickupReady
+        ? ' · <b>✅ В радиусе трактора</b>'
+        : ` · до трактора: ${contact.pickupGap} м`;
+      return `<div class="evTxt" style="margin:6px 0"><b>🧲 ${esc(contact.goodName)} ×${contact.amount}</b> · ${contact.distance} м · ${esc(contact.bearing)}${pickup}${contact.sourceType ? ` · обломки ${esc(contact.sourceType)}` : ''} <button class="mini" type="button" data-salvage-course="${index}">📍 Курс</button> <button class="mini" type="button" data-salvage-focus="${index}">📷 Фокус</button></div>`;
+    }).join('')
     : '<div class="evTxt">В пределах радара нет сохранённых обломков.</div>';
   const nearest = summary.nearest
-    ? `Ближайший контакт: ${esc(summary.nearest.goodName)} ×${summary.nearest.amount}, ${summary.nearest.distance} м, курс ${esc(summary.nearest.bearing)}.`
+    ? `Ближайший контакт: ${esc(summary.nearest.goodName)} ×${summary.nearest.amount}, ${summary.nearest.distance} м, курс ${esc(summary.nearest.bearing)}${summary.nearest.pickupReady ? ' — трактор готов.' : `, до захвата ${summary.nearest.pickupGap} м.`}`
     : 'Радар не видит доступного salvage.';
-  panel.innerHTML = `<div class="pbox"><h2>🧲 Радар обломков</h2><div class="sub">Локационная сводка по сохранённому salvage текущей системы.</div><div class="evTxt" style="margin-top:10px">${nearest}<br>В зоне радара: ${summary.visible.length} · единиц груза: ${summary.totalAmount}${summary.hidden ? ` · вне радара: ${summary.hidden}` : ''}</div>${rows}<div class="prow"><button class="btn ghost" id="salvageRadarClose">Закрыть</button></div></div>`;
+  panel.innerHTML = `<div class="pbox"><h2>🧲 Радар обломков</h2><div class="sub">Локационная сводка по сохранённому salvage текущей системы.</div><div class="evTxt" style="margin-top:10px">${nearest}<br>В зоне радара: ${summary.visible.length} · единиц груза: ${summary.totalAmount}${summary.ready.length ? ` · в радиусе трактора: ${summary.ready.length}` : ''}${summary.hidden ? ` · вне радара: ${summary.hidden}` : ''}</div>${rows}<div class="prow"><button class="btn ghost" id="salvageRadarClose">Закрыть</button></div></div>`;
   panel.classList.remove('hidden');
   const closeAfter = command => button => {
     button.addEventListener('click', () => {
