@@ -26,6 +26,13 @@ function distance(ax, ay, bx, by) {
   return Math.hypot(finite(ax) - finite(bx), finite(ay) - finite(by));
 }
 
+function screenBearing(ax, ay, bx, by) {
+  const dx = finite(bx) - finite(ax);
+  const dy = finite(by) - finite(ay);
+  const degrees = Math.atan2(dy, dx) * 180 / Math.PI;
+  return Math.round((degrees + 360) % 360);
+}
+
 function salvageGoodName(goodId) {
   const id = String(goodId || '');
   return GOODS.find(good => good.id === id)?.n || 'неизвестный груз';
@@ -107,6 +114,7 @@ export function nearestSystemSalvage(save = null, systemId = null) {
         goodName: salvageGoodName(record?.goodId),
         amount,
         distance: range,
+        bearing: screenBearing(px, py, x, y),
       };
     }
   }
@@ -124,7 +132,7 @@ export function buildHailProfile(contact, save = null) {
   const salvage = summarizeSystemSalvage(save, systemId);
   const nearestSalvage = nearestSystemSalvage(save, systemId);
   const salvageIntel = salvage.fields > 0
-    ? ` Обломки на сенсорах: ${salvage.fields} пол., ${salvage.units} ед. груза.${nearestSalvage ? ` Ближайшее поле: ${nearestSalvage.distance} м — ${nearestSalvage.goodName} ×${nearestSalvage.amount}.` : ''}`
+    ? ` Обломки на сенсорах: ${salvage.fields} пол., ${salvage.units} ед. груза.${nearestSalvage ? ` Ближайшее поле: ${nearestSalvage.distance} м — ${nearestSalvage.goodName} ×${nearestSalvage.amount}, курс ${nearestSalvage.bearing}°.` : ''}`
     : ' Обломков на сенсорах нет.';
 
   const openingByDisposition = {
@@ -157,6 +165,7 @@ export function buildHailProfile(contact, save = null) {
     nearestSalvageGoodId: nearestSalvage?.goodId ?? null,
     nearestSalvageGoodName: nearestSalvage?.goodName ?? null,
     nearestSalvageAmount: nearestSalvage?.amount ?? null,
+    nearestSalvageBearing: nearestSalvage?.bearing ?? null,
     opening: openingByDisposition[contact.disposition] || openingByDisposition.neutral,
     identity: `${contact.factionName} · ${contact.roleName} · борт #${contact.uid}`,
     status,
