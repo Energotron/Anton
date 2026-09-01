@@ -10,6 +10,15 @@ function bearingLabel(dx, dy) {
   return labels[(octant + 8) % 8];
 }
 
+function reportBearing(dx, dy, inPlayerRadar) {
+  const exact = bearingLabel(dx, dy);
+  if (inPlayerRadar || exact === 'рядом') return { bearing: exact, bearingAccuracy: 'exact' };
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return { bearing: dx >= 0 ? 'восточный сектор' : 'западный сектор', bearingAccuracy: 'sector' };
+  }
+  return { bearing: dy >= 0 ? 'северный сектор' : 'южный сектор', bearingAccuracy: 'sector' };
+}
+
 function reportDistance(distance, inPlayerRadar) {
   if (inPlayerRadar) return distance;
   return Math.max(100, Math.round(distance / 100) * 100);
@@ -33,13 +42,15 @@ export function buildPatrolThreatIntel(save = null) {
       const dy = y - py;
       const distance = Math.round(Math.hypot(dx, dy));
       const inPlayerRadar = radar > 0 && distance <= radar;
+      const bearingReport = reportBearing(dx, dy, inPlayerRadar);
       return {
         uid: ship.uid ?? null,
         type: ship.type === 'raider' ? 'raider' : 'pirate',
         distance,
         reportedDistance: reportDistance(distance, inPlayerRadar),
         distanceAccuracy: inPlayerRadar ? 'exact' : 'estimated',
-        bearing: bearingLabel(dx, dy),
+        bearing: bearingReport.bearing,
+        bearingAccuracy: bearingReport.bearingAccuracy,
         inPlayerRadar,
       };
     })
