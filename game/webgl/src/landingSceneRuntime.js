@@ -5,7 +5,7 @@ export const LANDING_SCENES = Object.freeze({
   tech: { asset: new URL('../assets/landing/tech.svg', import.meta.url).href, title: 'Высокотехнологичный мир', ambience: 'Мегаполис-узел' }
 });
 
-const DOCK_RETURN_SELECTOR = '#questBack,#tradeBack';
+const DOCK_RETURN_SELECTOR = '#questBack,#tradeBack,#shipClose';
 
 export function detectPlanetType(text = '') {
   const value = String(text).toLowerCase();

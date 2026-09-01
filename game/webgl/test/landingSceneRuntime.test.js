@@ -22,11 +22,12 @@ test('every supported landing scene points at authored SVG art', () => {
   }
 });
 
-test('dock return fallback recognizes both quest and market back buttons', () => {
+test('dock return fallback recognizes quest, market and equipment exits', () => {
   const target = id => ({ closest: selector => selector.split(',').includes(`#${id}`) ? { id } : null });
   assert.equal(isDockReturnTarget(target('questBack')), true);
   assert.equal(isDockReturnTarget(target('tradeBack')), true);
-  assert.equal(isDockReturnTarget(target('shipClose')), false);
+  assert.equal(isDockReturnTarget(target('shipClose')), true);
+  assert.equal(isDockReturnTarget(target('infoClose')), false);
 });
 
 test('dock return fallback accepts a tap but rejects drag and mismatched pointers', () => {
