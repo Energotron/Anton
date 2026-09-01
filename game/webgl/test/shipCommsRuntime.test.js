@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildHailProfile, contactDisposition, listRadioContacts, summarizeSystemSalvage } from '../src/shipCommsRuntime.js';
+import { buildHailProfile, contactDisposition, listRadioContacts, nearestSystemSalvage, summarizeSystemSalvage } from '../src/shipCommsRuntime.js';
 
 function save(overrides = {}) {
   return {
@@ -69,7 +69,25 @@ test('system salvage summary ignores invalid records and counts recoverable carg
   assert.deepEqual(summarizeSystemSalvage(input, 3), { fields: 0, units: 0 });
 });
 
-test('hail status reports persisted salvage intel for the current system', () => {
+test('nearest salvage intel uses player position and ignores unusable records', () => {
+  const input = save({
+    P: { x: 10, y: 10 },
+    salvagePersistence: {
+      systems: {
+        2: [
+          { goodId: 'ore', amount: 3, x: 13, y: 14 },
+          { goodId: 'mach', amount: 2, x: 40, y: 50 },
+          { goodId: 'weap', amount: 0, x: 11, y: 11 },
+          { goodId: 'ore', amount: 4, x: 'bad', y: 12 },
+        ],
+      },
+    },
+  });
+  assert.deepEqual(nearestSystemSalvage(input, 2), { goodId: 'ore', amount: 3, distance: 5 });
+  assert.equal(nearestSystemSalvage(input, 3), null);
+});
+
+test('hail status reports persisted salvage intel and nearest field range', () => {
   const input = save({
     salvagePersistence: {
       systems: {
@@ -84,5 +102,7 @@ test('hail status reports persisted salvage intel for the current system', () =>
   const profile = buildHailProfile(patrol, input);
   assert.equal(profile.salvageFields, 2);
   assert.equal(profile.salvageUnits, 5);
+  assert.equal(profile.nearestSalvageDistance, 22);
   assert.match(profile.status, /Обломки на сенсорах: 2 пол\., 5 ед\. груза/);
+  assert.match(profile.status, /Ближайшее поле: 22 м\./);
 });

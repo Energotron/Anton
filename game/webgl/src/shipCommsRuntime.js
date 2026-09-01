@@ -78,6 +78,33 @@ export function summarizeSystemSalvage(save = null, systemId = null) {
   return { fields, units };
 }
 
+export function nearestSystemSalvage(save = null, systemId = null) {
+  const id = Number(systemId);
+  if (!save || typeof save !== 'object' || !Number.isInteger(id) || id < 0) return null;
+  const raw = save.salvagePersistence?.systems?.[String(id)];
+  if (!Array.isArray(raw)) return null;
+  const px = Number(save.P?.x);
+  const py = Number(save.P?.y);
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
+
+  let nearest = null;
+  for (const record of raw) {
+    const amount = Math.floor(Number(record?.amount));
+    const x = Number(record?.x);
+    const y = Number(record?.y);
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const range = Math.round(distance(px, py, x, y));
+    if (!nearest || range < nearest.distance) {
+      nearest = {
+        goodId: String(record?.goodId || ''),
+        amount,
+        distance: range,
+      };
+    }
+  }
+  return nearest;
+}
+
 export function buildHailProfile(contact, save = null) {
   if (!contact) return null;
   const systems = Array.isArray(save?.systems) ? save.systems : [];
@@ -87,8 +114,9 @@ export function buildHailProfile(contact, save = null) {
   const portCount = Array.isArray(system?.planets) ? system.planets.filter(p => p?.hasPort).length : 0;
   const systemName = system?.name || `Система ${systemId >= 0 ? systemId : '—'}`;
   const salvage = summarizeSystemSalvage(save, systemId);
+  const nearestSalvage = nearestSystemSalvage(save, systemId);
   const salvageIntel = salvage.fields > 0
-    ? ` Обломки на сенсорах: ${salvage.fields} пол., ${salvage.units} ед. груза.`
+    ? ` Обломки на сенсорах: ${salvage.fields} пол., ${salvage.units} ед. груза.${nearestSalvage ? ` Ближайшее поле: ${nearestSalvage.distance} м.` : ''}`
     : ' Обломков на сенсорах нет.';
 
   const openingByDisposition = {
@@ -117,6 +145,7 @@ export function buildHailProfile(contact, save = null) {
     portCount,
     salvageFields: salvage.fields,
     salvageUnits: salvage.units,
+    nearestSalvageDistance: nearestSalvage?.distance ?? null,
     opening: openingByDisposition[contact.disposition] || openingByDisposition.neutral,
     identity: `${contact.factionName} · ${contact.roleName} · борт #${contact.uid}`,
     status,
