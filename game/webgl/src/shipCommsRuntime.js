@@ -60,6 +60,24 @@ export function listRadioContacts(save = null) {
     .sort((a, b) => a.distance - b.distance || finite(a.uid) - finite(b.uid));
 }
 
+export function summarizeSystemSalvage(save = null, systemId = null) {
+  const id = Number(systemId);
+  if (!save || typeof save !== 'object' || !Number.isInteger(id) || id < 0) {
+    return { fields: 0, units: 0 };
+  }
+  const raw = save.salvagePersistence?.systems?.[String(id)];
+  if (!Array.isArray(raw)) return { fields: 0, units: 0 };
+  let fields = 0;
+  let units = 0;
+  for (const record of raw) {
+    const amount = Math.floor(finite(record?.amount, 0));
+    if (amount <= 0) continue;
+    fields++;
+    units += amount;
+  }
+  return { fields, units };
+}
+
 export function buildHailProfile(contact, save = null) {
   if (!contact) return null;
   const systems = Array.isArray(save?.systems) ? save.systems : [];
@@ -68,6 +86,10 @@ export function buildHailProfile(contact, save = null) {
   const danger = Math.max(1, Math.min(5, Math.trunc(finite(system?.danger, 1))));
   const portCount = Array.isArray(system?.planets) ? system.planets.filter(p => p?.hasPort).length : 0;
   const systemName = system?.name || `Система ${systemId >= 0 ? systemId : '—'}`;
+  const salvage = summarizeSystemSalvage(save, systemId);
+  const salvageIntel = salvage.fields > 0
+    ? ` Обломки на сенсорах: ${salvage.fields} пол., ${salvage.units} ед. груза.`
+    : ' Обломков на сенсорах нет.';
 
   const openingByDisposition = {
     friendly: 'Канал открыт. Рад видеть рейнджера на этой частоте.',
@@ -76,15 +98,15 @@ export function buildHailProfile(contact, save = null) {
     hostile: 'Частота захвачена. Говори быстро, рейнджер.',
   };
 
-  let status = `Мы держим курс в системе ${systemName}. Уровень угрозы ${danger}/5.`;
+  let status = `Мы держим курс в системе ${systemName}. Уровень угрозы ${danger}/5.${salvageIntel}`;
   if (contact.type === 'trader') {
-    status = `Торговый маршрут через ${systemName} активен. Доступных портов: ${portCount}. Угроза ${danger}/5.`;
+    status = `Торговый маршрут через ${systemName} активен. Доступных портов: ${portCount}. Угроза ${danger}/5.${salvageIntel}`;
   } else if (contact.type === 'patrol') {
-    status = `Патруль контролирует ${systemName}. Тактическая оценка угрозы: ${danger}/5.`;
+    status = `Патруль контролирует ${systemName}. Тактическая оценка угрозы: ${danger}/5.${salvageIntel}`;
   } else if (contact.type === 'pirate' || contact.type === 'raider') {
     status = danger >= 4
-      ? `Здесь опасный сектор, и это нам нравится. ${systemName} сейчас оценивается в ${danger}/5.`
-      : `Мы работаем на этой трассе. ${systemName}: риск ${danger}/5.`;
+      ? `Здесь опасный сектор, и это нам нравится. ${systemName} сейчас оценивается в ${danger}/5.${salvageIntel}`
+      : `Мы работаем на этой трассе. ${systemName}: риск ${danger}/5.${salvageIntel}`;
   }
 
   return {
@@ -93,6 +115,8 @@ export function buildHailProfile(contact, save = null) {
     systemName,
     danger,
     portCount,
+    salvageFields: salvage.fields,
+    salvageUnits: salvage.units,
     opening: openingByDisposition[contact.disposition] || openingByDisposition.neutral,
     identity: `${contact.factionName} · ${contact.roleName} · борт #${contact.uid}`,
     status,

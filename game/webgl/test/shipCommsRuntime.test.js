@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildHailProfile, contactDisposition, listRadioContacts } from '../src/shipCommsRuntime.js';
+import { buildHailProfile, contactDisposition, listRadioContacts, summarizeSystemSalvage } from '../src/shipCommsRuntime.js';
 
 function save(overrides = {}) {
   return {
@@ -15,6 +15,7 @@ function save(overrides = {}) {
       { uid: 1003, type: 'pirate', fac: 'pir', x: 700, y: 0, hull: 35 },
       { uid: 1004, type: 'raider', fac: 'pir', x: 50, y: 0, hull: 0 },
     ],
+    salvagePersistence: overrides.salvagePersistence,
   };
 }
 
@@ -50,4 +51,38 @@ test('trader hail reports active ports from current system data', () => {
   const profile = buildHailProfile(trader, input);
   assert.match(profile.status, /Доступных портов: 2/);
   assert.equal(profile.disposition, 'neutral');
+});
+
+test('system salvage summary ignores invalid records and counts recoverable cargo units', () => {
+  const input = save({
+    salvagePersistence: {
+      systems: {
+        2: [
+          { goodId: 'ore', amount: 3, x: 10, y: 20 },
+          { goodId: 'mach', amount: 2, x: 30, y: 40 },
+          { goodId: 'weap', amount: 0, x: 50, y: 60 },
+        ],
+      },
+    },
+  });
+  assert.deepEqual(summarizeSystemSalvage(input, 2), { fields: 2, units: 5 });
+  assert.deepEqual(summarizeSystemSalvage(input, 3), { fields: 0, units: 0 });
+});
+
+test('hail status reports persisted salvage intel for the current system', () => {
+  const input = save({
+    salvagePersistence: {
+      systems: {
+        2: [
+          { goodId: 'ore', amount: 3, x: 10, y: 20 },
+          { goodId: 'mach', amount: 2, x: 30, y: 40 },
+        ],
+      },
+    },
+  });
+  const patrol = listRadioContacts(input).find(c => c.uid === 1001);
+  const profile = buildHailProfile(patrol, input);
+  assert.equal(profile.salvageFields, 2);
+  assert.equal(profile.salvageUnits, 5);
+  assert.match(profile.status, /Обломки на сенсорах: 2 пол\., 5 ед\. груза/);
 });
