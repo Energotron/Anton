@@ -40,3 +40,10 @@ test('clampCameraTarget falls back from non-finite saved bounds', () => {
   assert.ok(Number.isFinite(target.x));
   assert.ok(Number.isFinite(target.y));
 });
+
+test('clampCameraTarget repairs inverted saved bounds before clamping', () => {
+  assert.deepEqual(
+    clampCameraTarget(5000, -5000, { minX: 900, maxX: -900, minY: 800, maxY: -800 }),
+    { x: 900, y: -800 }
+  );
+});
