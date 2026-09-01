@@ -69,7 +69,7 @@ test('system salvage summary ignores invalid records and counts recoverable carg
   assert.deepEqual(summarizeSystemSalvage(input, 3), { fields: 0, units: 0 });
 });
 
-test('nearest salvage intel uses player position, cargo names and bearing while ignoring unusable records', () => {
+test('nearest salvage intel uses player position, cargo names and compass bearing while ignoring unusable records', () => {
   const input = save({
     P: { x: 10, y: 10 },
     salvagePersistence: {
@@ -83,7 +83,7 @@ test('nearest salvage intel uses player position, cargo names and bearing while 
       },
     },
   });
-  assert.deepEqual(nearestSystemSalvage(input, 2), { goodId: 'ore', goodName: 'Руда', amount: 3, distance: 5, bearing: 53 });
+  assert.deepEqual(nearestSystemSalvage(input, 2), { goodId: 'ore', goodName: 'Руда', amount: 3, distance: 5, bearing: 143 });
   assert.equal(nearestSystemSalvage(input, 3), null);
 });
 
@@ -101,11 +101,11 @@ test('nearest salvage uses a safe label for unknown cargo ids', () => {
     goodName: 'неизвестный груз',
     amount: 1,
     distance: 5,
-    bearing: 53,
+    bearing: 143,
   });
 });
 
-test('hail status reports persisted salvage intel, nearest range, cargo identity and bearing', () => {
+test('hail status reports persisted salvage intel, nearest range, cargo identity and compass bearing', () => {
   const input = save({
     salvagePersistence: {
       systems: {
@@ -124,7 +124,7 @@ test('hail status reports persisted salvage intel, nearest range, cargo identity
   assert.equal(profile.nearestSalvageGoodId, 'ore');
   assert.equal(profile.nearestSalvageGoodName, 'Руда');
   assert.equal(profile.nearestSalvageAmount, 3);
-  assert.equal(profile.nearestSalvageBearing, 63);
+  assert.equal(profile.nearestSalvageBearing, 153);
   assert.match(profile.status, /Обломки на сенсорах: 2 пол\., 5 ед\. груза/);
-  assert.match(profile.status, /Ближайшее поле: 22 м — Руда ×3, курс 63°\./);
+  assert.match(profile.status, /Ближайшее поле: 22 м — Руда ×3, курс 153°\./);
 });
