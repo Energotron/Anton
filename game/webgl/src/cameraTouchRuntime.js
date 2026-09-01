@@ -1,5 +1,6 @@
 export const CAMERA_PAN_CODES = Object.freeze({ up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' });
 export const CAMERA_PAN_HOLD = Object.freeze({ delayMs: 220, repeatMs: 85 });
+export const CAMERA_FOLLOW_CODE = 'KeyC';
 
 export function buildCameraControlState(active = false) {
   return {
@@ -11,6 +12,14 @@ export function buildCameraControlState(active = false) {
 
 export function makeCameraKeyEvent(win, code) {
   return new win.KeyboardEvent('keydown', { code, key: code, shiftKey: true, bubbles: true, cancelable: true });
+}
+
+export function makeCameraFollowKeyEvent(win) {
+  return new win.KeyboardEvent('keydown', { code: CAMERA_FOLLOW_CODE, key: 'c', bubbles: true, cancelable: true });
+}
+
+export function shouldFallbackCameraFollow(hasRuntimeFollow, touchCameraFree) {
+  return !hasRuntimeFollow && Boolean(touchCameraFree);
 }
 
 export function cameraPanPulseCount(heldMs, profile = CAMERA_PAN_HOLD) {
@@ -52,6 +61,7 @@ export function installCameraTouchControls(win = globalThis?.window) {
   doc.body.appendChild(root);
 
   let state = buildCameraControlState(false);
+  let touchCameraFree = false;
   const modeBtn = doc.getElementById('cameraMinimapModeBtn');
   const syncMode = () => {
     modeBtn.textContent = state.modeLabel;
@@ -64,6 +74,7 @@ export function installCameraTouchControls(win = globalThis?.window) {
   const activeHolds = new Map();
   const pulseCameraPan = code => {
     if (!code) return;
+    touchCameraFree = true;
     win.dispatchEvent(makeCameraKeyEvent(win, code));
     win.dispatchEvent(new win.KeyboardEvent('keyup', { code, key: code, bubbles: true }));
   };
@@ -107,7 +118,15 @@ export function installCameraTouchControls(win = globalThis?.window) {
     event.preventDefault();
     event.stopPropagation();
     const runtimeFollow = doc.getElementById('ctxCam');
-    if (runtimeFollow) runtimeFollow.click();
+    if (runtimeFollow) {
+      runtimeFollow.click();
+      touchCameraFree = false;
+      return;
+    }
+    if (shouldFallbackCameraFollow(false, touchCameraFree)) {
+      win.dispatchEvent(makeCameraFollowKeyEvent(win));
+      touchCameraFree = false;
+    }
   });
 
   modeBtn.addEventListener('pointerdown', event => {
@@ -122,6 +141,7 @@ export function installCameraTouchControls(win = globalThis?.window) {
     if (!state.minimapCameraMode || synthetic.has(event) || event.button !== 0) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    touchCameraFree = true;
     const next = new win.PointerEvent('pointerdown', {
       bubbles: true, cancelable: true, clientX: event.clientX, clientY: event.clientY,
       pointerId: event.pointerId, pointerType: event.pointerType || 'touch', button: 0, buttons: 1, shiftKey: true,
