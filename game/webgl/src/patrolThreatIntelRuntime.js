@@ -15,6 +15,7 @@ export function buildPatrolThreatIntel(save = null) {
   const player = save.P || {};
   const px = finite(player.x);
   const py = finite(player.y);
+  const radar = Math.max(0, finite(player.radar));
   const ships = Array.isArray(save.demoShips) ? save.demoShips : [];
 
   const contacts = ships
@@ -25,22 +26,29 @@ export function buildPatrolThreatIntel(save = null) {
       const y = finite(ship.y);
       const dx = x - px;
       const dy = y - py;
+      const distance = Math.round(Math.hypot(dx, dy));
       return {
         uid: ship.uid ?? null,
         type: ship.type === 'raider' ? 'raider' : 'pirate',
-        distance: Math.round(Math.hypot(dx, dy)),
+        distance,
         bearing: bearingLabel(dx, dy),
+        inPlayerRadar: radar > 0 && distance <= radar,
       };
     })
     .sort((a, b) => a.distance - b.distance || finite(a.uid) - finite(b.uid));
 
   const raiders = contacts.filter(contact => contact.type === 'raider').length;
+  const sensorConfirmed = contacts.filter(contact => contact.inPlayerRadar).length;
+  const patrolOnly = contacts.length - sensorConfirmed;
   const nearest = contacts[0] || null;
+  const nearestSource = nearest
+    ? (nearest.inPlayerRadar ? 'подтверждено вашим радаром' : 'вне вашего радара, по данным патруля')
+    : '';
   const text = nearest
-    ? `Тактическая сводка патруля: пиратских контактов ${contacts.length}, рейдеров ${raiders}. Ближайшая угроза — ${nearest.type === 'raider' ? 'рейдер' : 'пират'}, ${nearest.distance} м, направление ${nearest.bearing}.`
+    ? `Тактическая сводка патруля: пиратских контактов ${contacts.length}, рейдеров ${raiders}. Ваш радар подтверждает ${sensorConfirmed}, ещё ${patrolOnly} переданы патрулём. Ближайшая угроза — ${nearest.type === 'raider' ? 'рейдер' : 'пират'}, ${nearest.distance} м, направление ${nearest.bearing}; ${nearestSource}.`
     : 'Тактическая сводка патруля: активных пиратских контактов в системе не обнаружено.';
 
-  return { contacts, count: contacts.length, raiders, nearest, text };
+  return { contacts, count: contacts.length, raiders, sensorConfirmed, patrolOnly, nearest, text };
 }
 
 function readSave(storage) {
