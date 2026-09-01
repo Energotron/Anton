@@ -17,6 +17,17 @@ const FACTION_NAMES = Object.freeze({
   pir: 'Пираты Вольницы',
 });
 
+const COMPASS_DIRECTIONS = Object.freeze([
+  'север',
+  'северо-восток',
+  'восток',
+  'юго-восток',
+  'юг',
+  'юго-запад',
+  'запад',
+  'северо-запад',
+]);
+
 function finite(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -31,6 +42,11 @@ function compassBearing(ax, ay, bx, by) {
   const dy = finite(by) - finite(ay);
   const degrees = Math.atan2(dx, -dy) * 180 / Math.PI;
   return Math.round((degrees + 360) % 360);
+}
+
+export function compassDirection(bearing) {
+  const normalized = ((finite(bearing) % 360) + 360) % 360;
+  return COMPASS_DIRECTIONS[Math.round(normalized / 45) % COMPASS_DIRECTIONS.length];
 }
 
 function salvageGoodName(goodId) {
@@ -109,12 +125,14 @@ export function nearestSystemSalvage(save = null, systemId = null) {
     if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(x) || !Number.isFinite(y)) continue;
     const range = Math.round(distance(px, py, x, y));
     if (!nearest || range < nearest.distance) {
+      const bearing = compassBearing(px, py, x, y);
       nearest = {
         goodId: String(record?.goodId || ''),
         goodName: salvageGoodName(record?.goodId),
         amount,
         distance: range,
-        bearing: compassBearing(px, py, x, y),
+        bearing,
+        direction: compassDirection(bearing),
       };
     }
   }
@@ -132,7 +150,7 @@ export function buildHailProfile(contact, save = null) {
   const salvage = summarizeSystemSalvage(save, systemId);
   const nearestSalvage = nearestSystemSalvage(save, systemId);
   const salvageIntel = salvage.fields > 0
-    ? ` Обломки на сенсорах: ${salvage.fields} пол., ${salvage.units} ед. груза.${nearestSalvage ? ` Ближайшее поле: ${nearestSalvage.distance} м — ${nearestSalvage.goodName} ×${nearestSalvage.amount}, курс ${nearestSalvage.bearing}°.` : ''}`
+    ? ` Обломки на сенсорах: ${salvage.fields} пол., ${salvage.units} ед. груза.${nearestSalvage ? ` Ближайшее поле: ${nearestSalvage.distance} м — ${nearestSalvage.goodName} ×${nearestSalvage.amount}, курс ${nearestSalvage.bearing}° (${nearestSalvage.direction}).` : ''}`
     : ' Обломков на сенсорах нет.';
 
   const openingByDisposition = {
@@ -166,6 +184,7 @@ export function buildHailProfile(contact, save = null) {
     nearestSalvageGoodName: nearestSalvage?.goodName ?? null,
     nearestSalvageAmount: nearestSalvage?.amount ?? null,
     nearestSalvageBearing: nearestSalvage?.bearing ?? null,
+    nearestSalvageDirection: nearestSalvage?.direction ?? null,
     opening: openingByDisposition[contact.disposition] || openingByDisposition.neutral,
     identity: `${contact.factionName} · ${contact.roleName} · борт #${contact.uid}`,
     status,

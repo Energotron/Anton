@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildHailProfile, contactDisposition, listRadioContacts, nearestSystemSalvage, summarizeSystemSalvage } from '../src/shipCommsRuntime.js';
+import { buildHailProfile, compassDirection, contactDisposition, listRadioContacts, nearestSystemSalvage, summarizeSystemSalvage } from '../src/shipCommsRuntime.js';
 
 function save(overrides = {}) {
   return {
@@ -69,6 +69,16 @@ test('system salvage summary ignores invalid records and counts recoverable carg
   assert.deepEqual(summarizeSystemSalvage(input, 3), { fields: 0, units: 0 });
 });
 
+test('compass direction maps bearings to stable eight-way labels', () => {
+  assert.equal(compassDirection(0), 'север');
+  assert.equal(compassDirection(44), 'северо-восток');
+  assert.equal(compassDirection(90), 'восток');
+  assert.equal(compassDirection(143), 'юго-восток');
+  assert.equal(compassDirection(180), 'юг');
+  assert.equal(compassDirection(270), 'запад');
+  assert.equal(compassDirection(359), 'север');
+});
+
 test('nearest salvage intel uses player position, cargo names and compass bearing while ignoring unusable records', () => {
   const input = save({
     P: { x: 10, y: 10 },
@@ -83,7 +93,7 @@ test('nearest salvage intel uses player position, cargo names and compass bearin
       },
     },
   });
-  assert.deepEqual(nearestSystemSalvage(input, 2), { goodId: 'ore', goodName: 'Руда', amount: 3, distance: 5, bearing: 143 });
+  assert.deepEqual(nearestSystemSalvage(input, 2), { goodId: 'ore', goodName: 'Руда', amount: 3, distance: 5, bearing: 143, direction: 'юго-восток' });
   assert.equal(nearestSystemSalvage(input, 3), null);
 });
 
@@ -102,10 +112,11 @@ test('nearest salvage uses a safe label for unknown cargo ids', () => {
     amount: 1,
     distance: 5,
     bearing: 143,
+    direction: 'юго-восток',
   });
 });
 
-test('hail status reports persisted salvage intel, nearest range, cargo identity and compass bearing', () => {
+test('hail status reports persisted salvage intel, nearest range, cargo identity and readable compass direction', () => {
   const input = save({
     salvagePersistence: {
       systems: {
@@ -125,6 +136,7 @@ test('hail status reports persisted salvage intel, nearest range, cargo identity
   assert.equal(profile.nearestSalvageGoodName, 'Руда');
   assert.equal(profile.nearestSalvageAmount, 3);
   assert.equal(profile.nearestSalvageBearing, 153);
+  assert.equal(profile.nearestSalvageDirection, 'юго-восток');
   assert.match(profile.status, /Обломки на сенсорах: 2 пол\., 5 ед\. груза/);
-  assert.match(profile.status, /Ближайшее поле: 22 м — Руда ×3, курс 153°\./);
+  assert.match(profile.status, /Ближайшее поле: 22 м — Руда ×3, курс 153° \(юго-восток\)\./);
 });
