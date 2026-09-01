@@ -18,6 +18,12 @@ test('deriveCameraBounds honors an explicit zero margin', () => {
   assert.equal(bounds.radius, 1235);
 });
 
+test('deriveCameraBounds ignores non-finite planet size', () => {
+  const bounds = deriveCameraBounds({ planets: [{ orbit: 1180, size: Infinity }] }, { minRadius: 500, margin: 0 });
+  assert.equal(bounds.radius, 1180);
+  assert.ok(Number.isFinite(bounds.radius));
+});
+
 test('clampCameraTarget preserves in-bounds coordinates', () => {
   assert.deepEqual(clampCameraTarget(200, -300, { minX: -900, maxX: 900, minY: -800, maxY: 800 }), { x: 200, y: -300 });
 });

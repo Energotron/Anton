@@ -13,7 +13,7 @@ export function deriveCameraBounds(systemData, options = {}) {
   let extent = 0;
   for (const planet of planets) {
     const orbit = Math.abs(Number(planet?.orbit));
-    const size = Math.max(0, Number(planet?.size) || 0);
+    const size = Math.max(0, finiteOr(planet?.size, 0));
     if (Number.isFinite(orbit)) extent = Math.max(extent, orbit + size);
   }
   const radius = Math.max(minRadius, extent + margin);
