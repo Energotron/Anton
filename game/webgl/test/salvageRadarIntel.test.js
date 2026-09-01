@@ -42,6 +42,26 @@ test('summary reports visible cargo amount, hidden contacts and nearest salvage'
   assert.equal(summary.nearest.id, 'a');
 });
 
+test('marks contacts inside tractor range and reports remaining approach distance', () => {
+  const contacts = listSalvageRadarContacts(saveWith([
+    { id: 'ready', goodId: 'ore', amount: 1, x: 30, y: 40 },
+    { id: 'edge', goodId: 'mach', amount: 1, x: 72, y: 0 },
+    { id: 'approach', goodId: 'weap', amount: 1, x: 100, y: 0 }
+  ]));
+  assert.deepEqual(contacts.map(c => [c.id, c.pickupReady, c.pickupGap, c.pickupRadius]), [
+    ['ready', true, 0, 72], ['edge', true, 0, 72], ['approach', false, 28, 72]
+  ]);
+});
+
+test('summary exposes currently tractor-ready contacts', () => {
+  const summary = buildSalvageRadarSummary(saveWith([
+    { id: 'a', goodId: 'ore', amount: 4, x: 50, y: 0 },
+    { id: 'b', goodId: 'mach', amount: 2, x: 72, y: 0 },
+    { id: 'c', goodId: 'weap', amount: 7, x: 100, y: 0 }
+  ]));
+  assert.deepEqual(summary.ready.map(c => c.id), ['a', 'b']);
+});
+
 test('invalid, exhausted and unsupported salvage entries are ignored safely', () => {
   const contacts = listSalvageRadarContacts(saveWith([
     { goodId: 'ore', amount: 0, x: 1, y: 1 },
