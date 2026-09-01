@@ -5,6 +5,8 @@ export const LANDING_SCENES = Object.freeze({
   tech: { asset: new URL('../assets/landing/tech.svg', import.meta.url).href, title: 'Высокотехнологичный мир', ambience: 'Мегаполис-узел' }
 });
 
+const DOCK_RETURN_SELECTOR = '#questBack,#tradeBack';
+
 export function detectPlanetType(text = '') {
   const value = String(text).toLowerCase();
   for (const type of Object.keys(LANDING_SCENES)) {
@@ -25,6 +27,10 @@ export function isTapGesture(start, end, maxDistance = 14) {
   return Math.hypot(dx, dy) <= maxDistance;
 }
 
+export function isDockReturnTarget(target) {
+  return !!target?.closest?.(DOCK_RETURN_SELECTOR);
+}
+
 export function returnQuestPanelToDock(doc = globalThis?.document) {
   const dockButton = doc?.getElementById?.('ctxDock');
   if (!dockButton || typeof dockButton.click !== 'function') return false;
@@ -39,9 +45,8 @@ export function installQuestBackNavigationFallback(win = globalThis?.window) {
 
   let pointerStart = null;
   let routedAt = 0;
-  const targetBack = target => target?.closest?.('#questBack') || null;
   const route = event => {
-    if (!targetBack(event?.target)) return false;
+    if (!isDockReturnTarget(event?.target)) return false;
     if (!returnQuestPanelToDock(doc)) return false;
     event?.preventDefault?.();
     event?.stopPropagation?.();
@@ -50,7 +55,7 @@ export function installQuestBackNavigationFallback(win = globalThis?.window) {
   };
 
   doc.addEventListener('pointerdown', event => {
-    if (!targetBack(event.target)) return;
+    if (!isDockReturnTarget(event.target)) return;
     pointerStart = {
       pointerId: event.pointerId,
       clientX: event.clientX,
@@ -59,7 +64,7 @@ export function installQuestBackNavigationFallback(win = globalThis?.window) {
   }, true);
 
   doc.addEventListener('pointerup', event => {
-    if (!targetBack(event.target)) {
+    if (!isDockReturnTarget(event.target)) {
       pointerStart = null;
       return;
     }
@@ -70,7 +75,7 @@ export function installQuestBackNavigationFallback(win = globalThis?.window) {
 
   doc.addEventListener('pointercancel', () => { pointerStart = null; }, true);
   doc.addEventListener('click', event => {
-    if (!targetBack(event.target)) return;
+    if (!isDockReturnTarget(event.target)) return;
     if (Date.now() - routedAt < 600) {
       event.preventDefault?.();
       event.stopPropagation?.();

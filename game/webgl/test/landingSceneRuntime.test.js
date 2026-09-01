@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectPlanetType, isTapGesture, landingSceneForType, returnQuestPanelToDock } from '../src/landingSceneRuntime.js';
+import { detectPlanetType, isDockReturnTarget, isTapGesture, landingSceneForType, returnQuestPanelToDock } from '../src/landingSceneRuntime.js';
 
 test('detectPlanetType reads runtime dock detail tokens', () => {
   assert.equal(detectPlanetType('Система Тау · промышленная · ice'), 'ice');
@@ -22,14 +22,21 @@ test('every supported landing scene points at authored SVG art', () => {
   }
 });
 
-test('quest back fallback accepts a tap but rejects drag and mismatched pointers', () => {
+test('dock return fallback recognizes both quest and market back buttons', () => {
+  const target = id => ({ closest: selector => selector.split(',').includes(`#${id}`) ? { id } : null });
+  assert.equal(isDockReturnTarget(target('questBack')), true);
+  assert.equal(isDockReturnTarget(target('tradeBack')), true);
+  assert.equal(isDockReturnTarget(target('shipClose')), false);
+});
+
+test('dock return fallback accepts a tap but rejects drag and mismatched pointers', () => {
   const start = { pointerId: 7, clientX: 100, clientY: 80 };
   assert.equal(isTapGesture(start, { pointerId: 7, clientX: 108, clientY: 86 }), true);
   assert.equal(isTapGesture(start, { pointerId: 7, clientX: 130, clientY: 80 }), false);
   assert.equal(isTapGesture(start, { pointerId: 8, clientX: 100, clientY: 80 }), false);
 });
 
-test('quest back fallback returns through the live dock context action', () => {
+test('dock return fallback returns through the live dock context action', () => {
   let clicks = 0;
   const doc = {
     getElementById(id) {
