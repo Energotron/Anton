@@ -17,6 +17,70 @@ export function landingSceneForType(type) {
   return LANDING_SCENES[type] || LANDING_SCENES.rock;
 }
 
+export function isTapGesture(start, end, maxDistance = 14) {
+  if (!start || !end) return false;
+  if (start.pointerId != null && end.pointerId != null && start.pointerId !== end.pointerId) return false;
+  const dx = Number(end.clientX || 0) - Number(start.clientX || 0);
+  const dy = Number(end.clientY || 0) - Number(start.clientY || 0);
+  return Math.hypot(dx, dy) <= maxDistance;
+}
+
+export function returnQuestPanelToDock(doc = globalThis?.document) {
+  const dockButton = doc?.getElementById?.('ctxDock');
+  if (!dockButton || typeof dockButton.click !== 'function') return false;
+  dockButton.click();
+  return true;
+}
+
+export function installQuestBackNavigationFallback(win = globalThis?.window) {
+  const doc = win?.document;
+  if (!doc || doc.documentElement?.dataset?.kr3QuestBackFallback === '1') return false;
+  if (doc.documentElement?.dataset) doc.documentElement.dataset.kr3QuestBackFallback = '1';
+
+  let pointerStart = null;
+  let routedAt = 0;
+  const targetBack = target => target?.closest?.('#questBack') || null;
+  const route = event => {
+    if (!targetBack(event?.target)) return false;
+    if (!returnQuestPanelToDock(doc)) return false;
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    routedAt = Date.now();
+    return true;
+  };
+
+  doc.addEventListener('pointerdown', event => {
+    if (!targetBack(event.target)) return;
+    pointerStart = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY
+    };
+  }, true);
+
+  doc.addEventListener('pointerup', event => {
+    if (!targetBack(event.target)) {
+      pointerStart = null;
+      return;
+    }
+    const tap = isTapGesture(pointerStart, event);
+    pointerStart = null;
+    if (tap) route(event);
+  }, true);
+
+  doc.addEventListener('pointercancel', () => { pointerStart = null; }, true);
+  doc.addEventListener('click', event => {
+    if (!targetBack(event.target)) return;
+    if (Date.now() - routedAt < 600) {
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      return;
+    }
+    route(event);
+  }, true);
+  return true;
+}
+
 function ensureStyles() {
   if (typeof document === 'undefined' || document.getElementById('kr3LandingSceneStyles')) return;
   const style = document.createElement('style');
@@ -55,6 +119,7 @@ export function mountLandingScene(panel) {
 function install() {
   if (typeof document === 'undefined') return;
   ensureStyles();
+  installQuestBackNavigationFallback(window);
   const panel = document.getElementById('panel');
   if (!panel) return;
   mountLandingScene(panel);
