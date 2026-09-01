@@ -26,10 +26,10 @@ function distance(ax, ay, bx, by) {
   return Math.hypot(finite(ax) - finite(bx), finite(ay) - finite(by));
 }
 
-function screenBearing(ax, ay, bx, by) {
+function compassBearing(ax, ay, bx, by) {
   const dx = finite(bx) - finite(ax);
   const dy = finite(by) - finite(ay);
-  const degrees = Math.atan2(dy, dx) * 180 / Math.PI;
+  const degrees = Math.atan2(dx, -dy) * 180 / Math.PI;
   return Math.round((degrees + 360) % 360);
 }
 
@@ -114,7 +114,7 @@ export function nearestSystemSalvage(save = null, systemId = null) {
         goodName: salvageGoodName(record?.goodId),
         amount,
         distance: range,
-        bearing: screenBearing(px, py, x, y),
+        bearing: compassBearing(px, py, x, y),
       };
     }
   }
