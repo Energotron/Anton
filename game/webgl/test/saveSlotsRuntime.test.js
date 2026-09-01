@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeSlot, saveKey, metaKey, formatSlotMeta } from '../src/saveSlotsRuntime.js';
+import { normalizeSlot, saveKey, metaKey, formatSlotMeta, syncSelectedSlotToLegacy, LEGACY_SAVE_KEY, LEGACY_META_KEY } from '../src/saveSlotsRuntime.js';
 
 test('normalizes save slots safely', () => {
   assert.equal(normalizeSlot(0), 0);
@@ -22,4 +22,20 @@ test('uses independent keys for extra slots', () => {
 test('formats empty and populated slot summaries', () => {
   assert.match(formatSlotMeta(1, null), /пусто/);
   assert.match(formatSlotMeta(1, { dateStr: '01.01.3500', sys: 'Солнце', money: 9000 }), /Солнце/);
+});
+
+test('clears stale legacy mirror when selected extra slot has no save', () => {
+  const values = new Map([
+    [LEGACY_SAVE_KEY, '{"stale":true}'],
+    [LEGACY_META_KEY, '{"sys":"Солнце"}']
+  ]);
+  const storage = {
+    getItem: (key) => values.has(key) ? values.get(key) : null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: (key) => values.delete(key)
+  };
+
+  assert.equal(syncSelectedSlotToLegacy(2, storage), false);
+  assert.equal(storage.getItem(LEGACY_SAVE_KEY), null);
+  assert.equal(storage.getItem(LEGACY_META_KEY), null);
 });

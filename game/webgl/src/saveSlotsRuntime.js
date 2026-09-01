@@ -44,11 +44,15 @@ function setActiveSlot(slot, storage = localStorage) {
   return s;
 }
 
-function syncSelectedSlotToLegacy(slot, storage = localStorage) {
+export function syncSelectedSlotToLegacy(slot, storage = localStorage) {
   const s = normalizeSlot(slot);
   if (s === 0) return !!storage.getItem(LEGACY_SAVE_KEY);
   const save = storage.getItem(saveKey(s));
-  if (!save) return false;
+  if (!save) {
+    storage.removeItem(LEGACY_SAVE_KEY);
+    storage.removeItem(LEGACY_META_KEY);
+    return false;
+  }
   const meta = storage.getItem(metaKey(s));
   storage.setItem(LEGACY_SAVE_KEY, save);
   if (meta) storage.setItem(LEGACY_META_KEY, meta); else storage.removeItem(LEGACY_META_KEY);
