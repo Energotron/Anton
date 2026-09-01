@@ -21,13 +21,18 @@ export function deriveCameraBounds(systemData, options = {}) {
 }
 
 export function clampCameraTarget(x, y, bounds) {
-  const bx = bounds || deriveCameraBounds(null);
+  const fallback = deriveCameraBounds(null);
+  const bx = bounds || fallback;
+  const minX = finiteOr(bx.minX, fallback.minX);
+  const maxX = finiteOr(bx.maxX, fallback.maxX);
+  const minY = finiteOr(bx.minY, fallback.minY);
+  const maxY = finiteOr(bx.maxY, fallback.maxY);
   const nx = Number(x);
   const ny = Number(y);
   const safeX = Number.isFinite(nx) ? nx : 0;
   const safeY = Number.isFinite(ny) ? ny : 0;
   return {
-    x: Math.min(bx.maxX, Math.max(bx.minX, safeX)),
-    y: Math.min(bx.maxY, Math.max(bx.minY, safeY))
+    x: Math.min(maxX, Math.max(minX, safeX)),
+    y: Math.min(maxY, Math.max(minY, safeY))
   };
 }

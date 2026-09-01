@@ -33,3 +33,10 @@ test('clampCameraTarget clamps overshoot and sanitizes invalid coordinates', () 
   assert.deepEqual(clampCameraTarget(5000, -5000, bounds), { x: 900, y: -800 });
   assert.deepEqual(clampCameraTarget(Number.NaN, Infinity, bounds), { x: 0, y: 0 });
 });
+
+test('clampCameraTarget falls back from non-finite saved bounds', () => {
+  const target = clampCameraTarget(5000, -5000, { minX: Number.NaN, maxX: Infinity, minY: -800, maxY: 800 });
+  assert.deepEqual(target, { x: CAMERA_BOUNDS_MIN_RADIUS, y: -800 });
+  assert.ok(Number.isFinite(target.x));
+  assert.ok(Number.isFinite(target.y));
+});
