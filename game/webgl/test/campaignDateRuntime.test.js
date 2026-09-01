@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CANONICAL_CAMPAIGN_YEAR,
+  consumeAutostartRequest,
   migrateLegacyCampaignSave,
   migrateSlot,
   runCanonicalNewGame,
@@ -75,4 +76,28 @@ test('new-game bridge reaches canonical date without destroying the previous sav
   assert.equal(loadedYear, 3550);
   assert.equal(storage.getItem('kr3_save_slot0'), oldSave);
   assert.equal(storage.getItem('kr3_save_meta'), oldMeta);
+});
+
+test('autostart is consumed before main.js can bypass the canonical new-game bridge', () => {
+  let replaced = null;
+  const win = {
+    location: {
+      href: 'https://example.test/game/webgl/?autostart=1&qa=touch#run',
+      origin: 'https://example.test',
+      pathname: '/game/webgl/',
+      search: '?autostart=1&qa=touch',
+      hash: '#run',
+    },
+    history: {
+      state: { source: 'qa' },
+      replaceState(state, _title, next) { replaced = { state, next }; },
+    },
+  };
+  assert.equal(consumeAutostartRequest(win), true);
+  assert.deepEqual(replaced, { state: { source: 'qa' }, next: '/game/webgl/?qa=touch#run' });
+});
+
+test('autostart consumer ignores unrelated query parameters', () => {
+  const win = { location: { href: 'https://example.test/game/webgl/?qa=touch', search: '?qa=touch' } };
+  assert.equal(consumeAutostartRequest(win), false);
 });

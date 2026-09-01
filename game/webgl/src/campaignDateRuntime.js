@@ -28,6 +28,22 @@ export function formatGameDate(date) {
   return `${day}.${month}.${Number(date.year)}`;
 }
 
+export function consumeAutostartRequest(win) {
+  const location = win?.location;
+  if (!location || !String(location.search || '').includes('autostart')) return false;
+  let url;
+  try {
+    url = new URL(location.href || `${location.origin || 'https://kr3.invalid'}${location.pathname || '/'}${location.search || ''}${location.hash || ''}`);
+  } catch {
+    return false;
+  }
+  if (!url.searchParams.has('autostart')) return false;
+  url.searchParams.delete('autostart');
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  try { win.history?.replaceState?.(win.history.state, '', next); } catch {}
+  return true;
+}
+
 export function migrateLegacyCampaignSave(input) {
   if (!input || typeof input !== 'object') return { data: input, migrated: false };
   const data = cloneJson(input);
@@ -157,6 +173,7 @@ export function installCampaignDateRuntime(win = globalThis?.window) {
   if (!win || !doc || !win.localStorage || win.__kr3CampaignDateRuntimeInstalled) return false;
   win.__kr3CampaignDateRuntimeInstalled = true;
 
+  const autostartRequested = consumeAutostartRequest(win);
   migrateAllSlots(win.localStorage);
   const originals = {};
   const resolveOriginals = () => {
@@ -186,6 +203,9 @@ export function installCampaignDateRuntime(win = globalThis?.window) {
     resolveOriginals();
     if (originals.startNewGame) win.startNewGame = () => runCanonicalNewGame(win, originals);
     if (originals.loadGame) win.loadGame = () => runCanonicalLoad(win, originals);
+    if (autostartRequested && originals.startNewGame && originals.saveGame && originals.loadGame) {
+      runCanonicalNewGame(win, originals);
+    }
   }, { once: true });
 
   return true;
