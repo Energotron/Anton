@@ -28,6 +28,23 @@ test('migrates a legacy 3500-era save by preserving elapsed campaign time', () =
   assert.equal(input.G.date.year, 3502, 'input must not be mutated');
 });
 
+test('recovers a canonical calendar for a valid save missing date fields', () => {
+  const input = { v: 2, G: { day: 32, turn: 32 }, P: {}, systems: [] };
+  const { data, migrated } = migrateLegacyCampaignSave(input);
+  assert.equal(migrated, true);
+  assert.deepEqual(data.G.date, { year: 3550, month: 2, day: 1 });
+  assert.equal(data.dateStr, '01.02.3550');
+  assert.equal(data.calendarEpoch, CANONICAL_CAMPAIGN_YEAR);
+  assert.equal(input.G.date, undefined, 'input must not be mutated');
+});
+
+test('does not invent a calendar for unrelated JSON', () => {
+  const input = { note: 'not a KR3 save' };
+  const { data, migrated } = migrateLegacyCampaignSave(input);
+  assert.equal(migrated, false);
+  assert.equal(data.G, undefined);
+});
+
 test('does not shift canonical or future saves twice', () => {
   const input = { dateStr: '01.01.3550', G: { date: { year: 3550, month: 1, day: 1 } } };
   const { data, migrated } = migrateLegacyCampaignSave(input);
