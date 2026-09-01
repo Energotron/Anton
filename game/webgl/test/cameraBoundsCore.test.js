@@ -13,6 +13,11 @@ test('deriveCameraBounds keeps a safe minimum for sparse systems', () => {
   assert.equal(deriveCameraBounds({ planets: [] }).radius, CAMERA_BOUNDS_MIN_RADIUS);
 });
 
+test('deriveCameraBounds honors an explicit zero margin', () => {
+  const bounds = deriveCameraBounds({ planets: [{ orbit: 1180, size: 55 }] }, { minRadius: 500, margin: 0 });
+  assert.equal(bounds.radius, 1235);
+});
+
 test('clampCameraTarget preserves in-bounds coordinates', () => {
   assert.deepEqual(clampCameraTarget(200, -300, { minX: -900, maxX: 900, minY: -800, maxY: 800 }), { x: 200, y: -300 });
 });

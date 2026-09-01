@@ -1,9 +1,14 @@
 export const CAMERA_BOUNDS_MIN_RADIUS = 980;
 export const CAMERA_BOUNDS_MARGIN = 360;
 
+function finiteOr(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
 export function deriveCameraBounds(systemData, options = {}) {
-  const minRadius = Math.max(200, Number(options.minRadius) || CAMERA_BOUNDS_MIN_RADIUS);
-  const margin = Math.max(0, Number(options.margin) || CAMERA_BOUNDS_MARGIN);
+  const minRadius = Math.max(200, finiteOr(options.minRadius, CAMERA_BOUNDS_MIN_RADIUS));
+  const margin = Math.max(0, finiteOr(options.margin, CAMERA_BOUNDS_MARGIN));
   const planets = Array.isArray(systemData?.planets) ? systemData.planets : [];
   let extent = 0;
   for (const planet of planets) {
