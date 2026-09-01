@@ -1,3 +1,5 @@
+import { SALVAGE_PICKUP_RADIUS } from './salvageCore.js';
+
 export const SALVAGE_GOOD_NAMES = Object.freeze({
   ore: 'Руда', mach: 'Оборудование', weap: 'Оружие'
 });
@@ -45,6 +47,9 @@ export function listSalvageRadarContacts(save = null) {
         distance,
         bearing: bearingLabel(dx, dy),
         inRadar: distance <= radar,
+        pickupReady: distance <= SALVAGE_PICKUP_RADIUS,
+        pickupGap: Math.max(0, distance - SALVAGE_PICKUP_RADIUS),
+        pickupRadius: SALVAGE_PICKUP_RADIUS,
         sourceType: record?.sourceType == null ? null : String(record.sourceType)
       };
     })
@@ -69,10 +74,12 @@ export function buildSalvageRadarSummary(save = null) {
   const contacts = listSalvageRadarContacts(save);
   const visible = contacts.filter(c => c.inRadar);
   const hidden = contacts.length - visible.length;
+  const ready = visible.filter(c => c.pickupReady);
   return {
     contacts,
     visible,
     hidden,
+    ready,
     nearest: visible[0] || null,
     totalAmount: visible.reduce((sum, c) => sum + c.amount, 0)
   };
