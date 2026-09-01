@@ -24,6 +24,11 @@ function reportDistance(distance, inPlayerRadar) {
   return Math.max(100, Math.round(distance / 100) * 100);
 }
 
+function reportThreatType(type, inPlayerRadar) {
+  if (!inPlayerRadar) return { reportedType: 'pirate_contact', typeAccuracy: 'generic' };
+  return { reportedType: type, typeAccuracy: 'exact' };
+}
+
 export function buildPatrolThreatIntel(save = null) {
   if (!save || typeof save !== 'object') return null;
   const player = save.P || {};
@@ -42,10 +47,14 @@ export function buildPatrolThreatIntel(save = null) {
       const dy = y - py;
       const distance = Math.round(Math.hypot(dx, dy));
       const inPlayerRadar = radar > 0 && distance <= radar;
+      const type = ship.type === 'raider' ? 'raider' : 'pirate';
       const bearingReport = reportBearing(dx, dy, inPlayerRadar);
+      const typeReport = reportThreatType(type, inPlayerRadar);
       return {
         uid: ship.uid ?? null,
-        type: ship.type === 'raider' ? 'raider' : 'pirate',
+        type,
+        reportedType: typeReport.reportedType,
+        typeAccuracy: typeReport.typeAccuracy,
         distance,
         reportedDistance: reportDistance(distance, inPlayerRadar),
         distanceAccuracy: inPlayerRadar ? 'exact' : 'estimated',
@@ -56,7 +65,7 @@ export function buildPatrolThreatIntel(save = null) {
     })
     .sort((a, b) => a.distance - b.distance || finite(a.uid) - finite(b.uid));
 
-  const raiders = contacts.filter(contact => contact.type === 'raider').length;
+  const confirmedRaiders = contacts.filter(contact => contact.inPlayerRadar && contact.type === 'raider').length;
   const sensorConfirmed = contacts.filter(contact => contact.inPlayerRadar).length;
   const patrolOnly = contacts.length - sensorConfirmed;
   const nearest = contacts[0] || null;
@@ -66,11 +75,17 @@ export function buildPatrolThreatIntel(save = null) {
   const nearestDistance = nearest
     ? `${nearest.distanceAccuracy === 'estimated' ? 'примерно ' : ''}${nearest.reportedDistance} м`
     : '';
+  const nearestLabel = nearest
+    ? (nearest.reportedType === 'raider' ? 'рейдер' : nearest.reportedType === 'pirate' ? 'пират' : 'пиратский контакт')
+    : '';
+  const classification = sensorConfirmed
+    ? ` Среди подтверждённых целей рейдеров ${confirmedRaiders}.`
+    : '';
   const text = nearest
-    ? `Тактическая сводка патруля: пиратских контактов ${contacts.length}, рейдеров ${raiders}. Ваш радар подтверждает ${sensorConfirmed}, ещё ${patrolOnly} переданы патрулём. Ближайшая угроза — ${nearest.type === 'raider' ? 'рейдер' : 'пират'}, ${nearestDistance}, направление ${nearest.bearing}; ${nearestSource}.`
+    ? `Тактическая сводка патруля: пиратских контактов ${contacts.length}. Ваш радар подтверждает ${sensorConfirmed}, ещё ${patrolOnly} переданы патрулём.${classification} Ближайшая угроза — ${nearestLabel}, ${nearestDistance}, направление ${nearest.bearing}; ${nearestSource}.`
     : 'Тактическая сводка патруля: активных пиратских контактов в системе не обнаружено.';
 
-  return { contacts, count: contacts.length, raiders, sensorConfirmed, patrolOnly, nearest, text };
+  return { contacts, count: contacts.length, raiders: confirmedRaiders, confirmedRaiders, sensorConfirmed, patrolOnly, nearest, text };
 }
 
 function readSave(storage) {
