@@ -28,6 +28,38 @@ export function formatGameDate(date) {
   return `${day}.${month}.${Number(date.year)}`;
 }
 
+function isLeapYear(year) {
+  return (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+}
+
+function dateFromElapsedCampaignDay(value) {
+  const elapsedDay = Math.max(1, Math.floor(Number(value) || 1));
+  let remaining = elapsedDay - 1;
+  let year = CANONICAL_CAMPAIGN_YEAR;
+  let month = 1;
+  let day = 1;
+  const monthDays = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+  while (remaining > 0) {
+    const daysInMonth = monthDays[month - 1] + (month === 2 && isLeapYear(year) ? 1 : 0);
+    const available = daysInMonth - day;
+    if (remaining <= available) {
+      day += remaining;
+      remaining = 0;
+      break;
+    }
+    remaining -= available + 1;
+    day = 1;
+    month++;
+    if (month > 12) {
+      month = 1;
+      year++;
+    }
+  }
+
+  return { year, month, day };
+}
+
 export function consumeAutostartRequest(win) {
   const location = win?.location;
   if (!location || !String(location.search || '').includes('autostart')) return false;
@@ -49,7 +81,16 @@ export function migrateLegacyCampaignSave(input) {
   const data = cloneJson(input);
   const date = data?.G?.date || parseDateString(data.dateStr);
   const year = Number(date?.year);
-  if (!Number.isFinite(year) || year < LEGACY_CAMPAIGN_YEAR || year >= CANONICAL_CAMPAIGN_YEAR) {
+  if (!Number.isFinite(year)) {
+    const validSaveShape = data?.P && typeof data.P === 'object' && data?.G && typeof data.G === 'object';
+    if (!validSaveShape) return { data, migrated: false };
+    const recoveredDate = dateFromElapsedCampaignDay(data.G.day ?? data.G.turn ?? data.turn ?? 1);
+    data.G.date = recoveredDate;
+    data.dateStr = formatGameDate(recoveredDate);
+    data.calendarEpoch = CANONICAL_CAMPAIGN_YEAR;
+    return { data, migrated: true };
+  }
+  if (year < LEGACY_CAMPAIGN_YEAR || year >= CANONICAL_CAMPAIGN_YEAR) {
     return { data, migrated: false };
   }
 
