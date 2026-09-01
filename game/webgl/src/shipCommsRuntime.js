@@ -1,3 +1,5 @@
+import { GOODS } from '../js/data.js';
+
 export const SAVE_KEY = 'kr3_save_slot0';
 
 const ROLE_NAMES = Object.freeze({
@@ -22,6 +24,11 @@ function finite(value, fallback = 0) {
 
 function distance(ax, ay, bx, by) {
   return Math.hypot(finite(ax) - finite(bx), finite(ay) - finite(by));
+}
+
+function salvageGoodName(goodId) {
+  const id = String(goodId || '');
+  return GOODS.find(good => good.id === id)?.n || 'неизвестный груз';
 }
 
 export function contactDisposition(contact = {}, reputation = 0) {
@@ -97,6 +104,7 @@ export function nearestSystemSalvage(save = null, systemId = null) {
     if (!nearest || range < nearest.distance) {
       nearest = {
         goodId: String(record?.goodId || ''),
+        goodName: salvageGoodName(record?.goodId),
         amount,
         distance: range,
       };
@@ -116,7 +124,7 @@ export function buildHailProfile(contact, save = null) {
   const salvage = summarizeSystemSalvage(save, systemId);
   const nearestSalvage = nearestSystemSalvage(save, systemId);
   const salvageIntel = salvage.fields > 0
-    ? ` Обломки на сенсорах: ${salvage.fields} пол., ${salvage.units} ед. груза.${nearestSalvage ? ` Ближайшее поле: ${nearestSalvage.distance} м.` : ''}`
+    ? ` Обломки на сенсорах: ${salvage.fields} пол., ${salvage.units} ед. груза.${nearestSalvage ? ` Ближайшее поле: ${nearestSalvage.distance} м — ${nearestSalvage.goodName} ×${nearestSalvage.amount}.` : ''}`
     : ' Обломков на сенсорах нет.';
 
   const openingByDisposition = {
@@ -146,6 +154,9 @@ export function buildHailProfile(contact, save = null) {
     salvageFields: salvage.fields,
     salvageUnits: salvage.units,
     nearestSalvageDistance: nearestSalvage?.distance ?? null,
+    nearestSalvageGoodId: nearestSalvage?.goodId ?? null,
+    nearestSalvageGoodName: nearestSalvage?.goodName ?? null,
+    nearestSalvageAmount: nearestSalvage?.amount ?? null,
     opening: openingByDisposition[contact.disposition] || openingByDisposition.neutral,
     identity: `${contact.factionName} · ${contact.roleName} · борт #${contact.uid}`,
     status,

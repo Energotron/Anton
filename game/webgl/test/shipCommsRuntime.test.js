@@ -69,7 +69,7 @@ test('system salvage summary ignores invalid records and counts recoverable carg
   assert.deepEqual(summarizeSystemSalvage(input, 3), { fields: 0, units: 0 });
 });
 
-test('nearest salvage intel uses player position and ignores unusable records', () => {
+test('nearest salvage intel uses player position, cargo names and ignores unusable records', () => {
   const input = save({
     P: { x: 10, y: 10 },
     salvagePersistence: {
@@ -83,11 +83,28 @@ test('nearest salvage intel uses player position and ignores unusable records', 
       },
     },
   });
-  assert.deepEqual(nearestSystemSalvage(input, 2), { goodId: 'ore', amount: 3, distance: 5 });
+  assert.deepEqual(nearestSystemSalvage(input, 2), { goodId: 'ore', goodName: 'Руда', amount: 3, distance: 5 });
   assert.equal(nearestSystemSalvage(input, 3), null);
 });
 
-test('hail status reports persisted salvage intel and nearest field range', () => {
+test('nearest salvage uses a safe label for unknown cargo ids', () => {
+  const input = save({
+    P: { x: 0, y: 0 },
+    salvagePersistence: {
+      systems: {
+        2: [{ goodId: 'future_loot', amount: 1, x: 3, y: 4 }],
+      },
+    },
+  });
+  assert.deepEqual(nearestSystemSalvage(input, 2), {
+    goodId: 'future_loot',
+    goodName: 'неизвестный груз',
+    amount: 1,
+    distance: 5,
+  });
+});
+
+test('hail status reports persisted salvage intel, nearest range and cargo identity', () => {
   const input = save({
     salvagePersistence: {
       systems: {
@@ -103,6 +120,9 @@ test('hail status reports persisted salvage intel and nearest field range', () =
   assert.equal(profile.salvageFields, 2);
   assert.equal(profile.salvageUnits, 5);
   assert.equal(profile.nearestSalvageDistance, 22);
+  assert.equal(profile.nearestSalvageGoodId, 'ore');
+  assert.equal(profile.nearestSalvageGoodName, 'Руда');
+  assert.equal(profile.nearestSalvageAmount, 3);
   assert.match(profile.status, /Обломки на сенсорах: 2 пол\., 5 ед\. груза/);
-  assert.match(profile.status, /Ближайшее поле: 22 м\./);
+  assert.match(profile.status, /Ближайшее поле: 22 м — Руда ×3\./);
 });
