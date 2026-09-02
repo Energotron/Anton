@@ -6,6 +6,7 @@ import { TAU, rnd, rndi, pick, clamp, dist, fmt, easeIO, mulberry } from './math
 import { FACS, WEAPONS, ENGINES, SHIELDS, HULLS, CARGOS, RADARS, SHOPCATS, RANKS, SYSNAMES, GOODS, ECON, goodById, DAY_TURNS } from './data.js';
 import { SYSNAMES_EXT } from './assets.js';
 import { WebGLRenderer } from './WebGLRenderer.js';
+import { applyTradeReputation } from '../src/tradeReputationCore.js';
 
 function showErr(m) {
   try { const b = document.getElementById('errBox'); b.style.display = 'block'; b.textContent = 'Ошибка: ' + m; } catch (e) {}
@@ -373,7 +374,7 @@ const G = {
   moveTarget: null, targetShip: null, shotMode: 'laser',
   anim: null, visited: new Set([0]),
   warpT: 0, warpTo: 0, warpDone: false, warpFrom: -1,
-  panel: null, offers: [], shopTab: 0,
+  panel: null, offers: [], shopTab: 0, tradeReputationTurns: {},
   // camera: follow player or free pan
   camFollow: true, camX: 0, camY: 0,
   news: []
@@ -1450,6 +1451,18 @@ function renderTradePanel() {
     <div class="prow"><button class="btn ghost" id="tradeBack">← В порт</button></div>
   </div>`;
   $('tradeBack').onclick = () => openDockPanel();
+  const rewardTradeReputation = () => {
+    const faction = systems[G.sysId]?.fac || null;
+    const outcome = applyTradeReputation({
+      reputation: P.rep,
+      faction,
+      turn: G.turn,
+      rewardedTurns: G.tradeReputationTurns,
+    });
+    P.rep = outcome.reputation;
+    G.tradeReputationTurns = outcome.rewardedTurns;
+    return outcome.delta;
+  };
   document.querySelectorAll('[data-buyg]').forEach(b => {
     b.onclick = () => {
       const id = b.dataset.buyg;
@@ -1458,7 +1471,9 @@ function renderTradePanel() {
         P.money -= price;
         pl.stock[id]--;
         P.cargo[id] = (P.cargo[id] || 0) + 1;
-        toast(`Куплено: ${goodById(id).n}`, 'good'); sfx.pick();
+        const reputationDelta = rewardTradeReputation();
+        const reputationNote = reputationDelta > 0 ? ` · репутация +${reputationDelta}` : '';
+        toast(`Куплено: ${goodById(id).n}${reputationNote}`, 'good'); sfx.pick();
         renderTradePanel();
       }
     };
@@ -1472,7 +1487,9 @@ function renderTradePanel() {
         P.cargo[id]--;
         if (P.cargo[id] <= 0) delete P.cargo[id];
         pl.stock[id] = (pl.stock[id] || 0) + 1;
-        toast(`Продано: ${goodById(id).n} (+${price})`, 'good'); sfx.pick();
+        const reputationDelta = rewardTradeReputation();
+        const reputationNote = reputationDelta > 0 ? ` · репутация +${reputationDelta}` : '';
+        toast(`Продано: ${goodById(id).n} (+${price})${reputationNote}`, 'good'); sfx.pick();
         renderTradePanel();
       }
     };
@@ -1720,7 +1737,8 @@ function serializeGame() {
       state: 'demo', phase: 'player', turn: G.turn, day: G.day,
       date: Object.assign({}, G.date), sysId: G.sysId,
       visited: Array.from(G.visited || []),
-      offers: G.offers || [], news: G.news || [], activeQuest: G.activeQuest || null
+      offers: G.offers || [], news: G.news || [], activeQuest: G.activeQuest || null,
+      tradeReputationTurns: Object.assign({}, G.tradeReputationTurns || {})
     },
     systems: systems.map(s => ({
       id: s.id, name: s.name, x: s.x, y: s.y, fac: s.fac, danger: s.danger,
@@ -1777,6 +1795,7 @@ function loadGame(slot) {
     G.offers = data.G.offers || [];
     G.news = data.G.news || [];
     G.activeQuest = data.G.activeQuest || null;
+    G.tradeReputationTurns = Object.assign({}, data.G.tradeReputationTurns || {});
     G.moveTarget = null; G.targetShip = null; G.anim = null; G.panel = null;
     G.phase = 'player'; G.state = 'demo';
     G.camFollow = true; G.camX = P.x; G.camY = P.y; G.warpFrom = -1;
@@ -1838,6 +1857,7 @@ function startNewGame() {
     G.panel = null;
     G.offers = [];
     G.activeQuest = null;
+    G.tradeReputationTurns = {};
     P.docked = null;
     P.cargo = {};
     P.lastPort = { sys: 0, pl: 0 };
