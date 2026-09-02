@@ -9,6 +9,7 @@ import { WebGLRenderer } from './WebGLRenderer.js';
 import { applyTradeReputation } from '../src/tradeReputationCore.js';
 import { applyPlayerHit } from '../src/combatDamageCore.js';
 import { applyAttackReputation } from '../src/combatReputationCore.js';
+import { npcAggressionResponse } from '../src/npcAggressionResponseCore.js';
 
 function showErr(m) {
   try { const b = document.getElementById('errBox'); b.style.display = 'block'; b.textContent = 'Ошибка: ' + m; } catch (e) {}
@@ -726,7 +727,11 @@ function enemyPhase() {
   for (const s of demoShips) {
     // waypoint: planet index or {x,y}
     let tx, ty;
-    if (typeof s.wp === 'number' && nPl > 0) {
+    const aggressionResponse = npcAggressionResponse(s, P);
+    if (aggressionResponse.overrideNavigation) {
+      tx = aggressionResponse.targetX;
+      ty = aggressionResponse.targetY;
+    } else if (typeof s.wp === 'number' && nPl > 0) {
       const pp = planetWorldPos(S, s.wp % nPl);
       tx = pp.x; ty = pp.y;
       if (dist(s.x, s.y, tx, ty) < 55) {
@@ -755,8 +760,8 @@ function enemyPhase() {
     s.ang = Math.atan2(dy, dx);
     movers.push({ o: s, x0: s.x, y0: s.y, x1: nx, y1: ny });
     s.x = nx; s.y = ny;
-    if (s.fac === 'pir' && dist(s.x, s.y, P.x, P.y) < 420 && Math.random() < 0.32) {
-      R.shot(s.x, s.y, P.x, P.y, FACS.pir.c); sfx.shoot();
+    if ((s.fac === 'pir' || aggressionResponse.canFire) && dist(s.x, s.y, P.x, P.y) < 420 && Math.random() < 0.32) {
+      R.shot(s.x, s.y, P.x, P.y, FACS[s.fac]?.c || FACS.pir.c); sfx.shoot();
       if (Math.random() < 0.5) {
         const dmg = 6 + rndi(0, 8);
         if (P.shield > 0) P.shield = Math.max(0, P.shield - dmg);
