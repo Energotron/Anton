@@ -76,6 +76,20 @@ test('completed faction delivery increases issuer reputation', () => {
   assert.equal(result.reputationDelta, DELIVERY_REPUTATION);
 });
 
+test('completed deliveries cannot raise faction reputation above diplomacy maximum', () => {
+  const quest = acceptDelivery({ ...OFFER, issuerFaction: 'gaal' });
+  const result = resolveDeliveryAtDock({
+    quest,
+    day: 10,
+    systemId: 7,
+    planetIdx: 2,
+    reputation: { gaal: 99 },
+  });
+  assert.equal(result.status, 'completed');
+  assert.equal(result.reputation.gaal, 100);
+  assert.equal(result.reputationDelta, 1);
+});
+
 test('expired faction delivery lowers issuer reputation', () => {
   const quest = acceptDelivery({ ...OFFER, faction: 'malok' });
   const result = resolveDeliveryAtDock({
@@ -88,6 +102,20 @@ test('expired faction delivery lowers issuer reputation', () => {
   assert.equal(result.status, 'expired');
   assert.deepEqual(result.reputation, { malok: 2 + DELIVERY_EXPIRED_REPUTATION });
   assert.equal(result.reputationDelta, DELIVERY_EXPIRED_REPUTATION);
+});
+
+test('expired deliveries cannot lower faction reputation below diplomacy minimum', () => {
+  const quest = acceptDelivery({ ...OFFER, issuerFaction: 'gaal' });
+  const result = resolveDeliveryAtDock({
+    quest,
+    day: 15,
+    systemId: 7,
+    planetIdx: 2,
+    reputation: { gaal: -100 },
+  });
+  assert.equal(result.status, 'expired');
+  assert.equal(result.reputation.gaal, -100);
+  assert.equal(result.reputationDelta, 0);
 });
 
 test('factionless delivery leaves reputation unchanged', () => {

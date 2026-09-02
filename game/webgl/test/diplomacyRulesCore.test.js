@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import {
   applyDiplomacyAction,
+  clampDiplomacyAttitude,
   normalizeDiplomacyRules,
   parseDiplomacyRules,
 } from '../src/diplomacyRulesCore.js';
@@ -28,6 +29,12 @@ test('applies every configured diplomatic action deterministically', () => {
 test('clamps positive and negative results to the configured range', () => {
   assert.equal(applyDiplomacyAction(99, 'aid', rules).result, 100);
   assert.equal(applyDiplomacyAction(-80, 'attack', rules).result, -100);
+});
+
+test('shared attitude clamp protects gameplay event integrations', () => {
+  assert.equal(clampDiplomacyAttitude(150), 100);
+  assert.equal(clampDiplomacyAttitude(-120), -100);
+  assert.equal(clampDiplomacyAttitude(24), 24);
 });
 
 test('does not mutate normalized rules between calculations', () => {

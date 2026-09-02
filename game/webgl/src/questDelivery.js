@@ -1,3 +1,5 @@
+import { clampDiplomacyAttitude } from './diplomacyRulesCore.js';
+
 export const DELIVERY_XP = 12;
 export const DELIVERY_REPUTATION = 2;
 export const DELIVERY_EXPIRED_REPUTATION = -1;
@@ -20,9 +22,11 @@ function reputationScore(reputation = {}, quest = null) {
 function applyReputationDelta(reputation = {}, quest = null, delta = 0) {
   const nextReputation = { ...reputation };
   const faction = reputationFaction(quest);
-  if (!faction || !delta) return nextReputation;
-  nextReputation[faction] = Number(nextReputation[faction] || 0) + Number(delta);
-  return nextReputation;
+  if (!faction || !delta) return { reputation: nextReputation, delta: 0 };
+  const previous = clampDiplomacyAttitude(Number(nextReputation[faction] || 0));
+  const result = clampDiplomacyAttitude(previous + Number(delta));
+  nextReputation[faction] = result;
+  return { reputation: nextReputation, delta: result - previous };
 }
 
 export function cargoUsed(cargo = {}, activeQuest = null) {
@@ -134,7 +138,7 @@ export function abandonDelivery({ quest = null, reputation = {} } = {}) {
     };
   }
 
-  const reputationAfterAbandon = applyReputationDelta(
+  const abandonment = applyReputationDelta(
     nextReputation,
     quest,
     DELIVERY_ABANDONED_REPUTATION,
@@ -143,8 +147,8 @@ export function abandonDelivery({ quest = null, reputation = {} } = {}) {
   return {
     status: 'abandoned',
     quest: null,
-    reputation: reputationAfterAbandon,
-    reputationDelta: reputationFaction(quest) ? DELIVERY_ABANDONED_REPUTATION : 0,
+    reputation: abandonment.reputation,
+    reputationDelta: abandonment.delta,
   };
 }
 
@@ -168,7 +172,7 @@ export function resolveDeliveryOnDayAdvance({ quest = null, day = 0, reputation 
     };
   }
 
-  const reputationAfterExpiry = applyReputationDelta(
+  const expiry = applyReputationDelta(
     nextReputation,
     quest,
     DELIVERY_EXPIRED_REPUTATION,
@@ -177,8 +181,8 @@ export function resolveDeliveryOnDayAdvance({ quest = null, day = 0, reputation 
   return {
     status: 'expired',
     quest: null,
-    reputation: reputationAfterExpiry,
-    reputationDelta: reputationFaction(quest) ? DELIVERY_EXPIRED_REPUTATION : 0,
+    reputation: expiry.reputation,
+    reputationDelta: expiry.delta,
   };
 }
 
@@ -197,7 +201,7 @@ export function resolveDeliveryAtDock({
   if (!quest) return { status: 'none', quest: null, cargo: nextCargo, money, xp, reputation: nextReputation };
 
   if (isQuestExpired(quest, day)) {
-    const reputationAfterExpiry = applyReputationDelta(
+    const expiry = applyReputationDelta(
       nextReputation,
       quest,
       DELIVERY_EXPIRED_REPUTATION,
@@ -208,8 +212,8 @@ export function resolveDeliveryAtDock({
       cargo: nextCargo,
       money,
       xp,
-      reputation: reputationAfterExpiry,
-      reputationDelta: reputationFaction(quest) ? DELIVERY_EXPIRED_REPUTATION : 0,
+      reputation: expiry.reputation,
+      reputationDelta: expiry.delta,
     };
   }
 
@@ -235,16 +239,16 @@ export function resolveDeliveryAtDock({
     else delete nextCargo[quest.g];
   }
 
-  const reputationAfterCompletion = applyReputationDelta(nextReputation, quest, DELIVERY_REPUTATION);
+  const completion = applyReputationDelta(nextReputation, quest, DELIVERY_REPUTATION);
   return {
     status: 'completed',
     quest: null,
     cargo: nextCargo,
     money: Number(money) + Number(quest.pay || 0),
     xp: Number(xp) + DELIVERY_XP,
-    reputation: reputationAfterCompletion,
+    reputation: completion.reputation,
     reward: Number(quest.pay || 0),
     xpAward: DELIVERY_XP,
-    reputationDelta: reputationFaction(quest) ? DELIVERY_REPUTATION : 0,
+    reputationDelta: completion.delta,
   };
 }

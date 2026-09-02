@@ -1,5 +1,7 @@
 const FALLBACK_RANGE = Object.freeze([-100, 100]);
 
+export const DIPLOMACY_ATTITUDE_RANGE = FALLBACK_RANGE;
+
 function finiteNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
@@ -43,6 +45,17 @@ export function parseDiplomacyRules(json) {
   return normalizeDiplomacyRules(JSON.parse(json));
 }
 
+export function clampDiplomacyAttitude(attitude, range = FALLBACK_RANGE) {
+  const current = finiteNumber(attitude);
+  const min = finiteNumber(range?.[0]);
+  const max = finiteNumber(range?.[1]);
+  if (current === null) throw new TypeError('attitude must be finite');
+  if (min === null || max === null || min >= max) {
+    throw new RangeError('attitude range must contain an ordered finite pair');
+  }
+  return Math.min(max, Math.max(min, current));
+}
+
 export function applyDiplomacyAction(attitude, action, rules) {
   const normalized = rules?.attitudeRange && rules?.actions
     ? rules
@@ -54,7 +67,9 @@ export function applyDiplomacyAction(attitude, action, rules) {
   const delta = normalized.actions[action];
   const rawResult = current + delta;
   const [min, max] = normalized.attitudeRange;
-  const result = normalized.clampResult ? Math.min(max, Math.max(min, rawResult)) : rawResult;
+  const result = normalized.clampResult
+    ? clampDiplomacyAttitude(rawResult, [min, max])
+    : rawResult;
 
   return Object.freeze({ action, previous: current, delta, result });
 }
