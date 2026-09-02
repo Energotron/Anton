@@ -55,7 +55,14 @@ function setActiveSlot(slot, storage = localStorage) {
 
 export function syncSelectedSlotToLegacy(slot, storage = localStorage) {
   const s = normalizeSlot(slot);
-  if (s === 0) return slotHasSave(0, storage);
+  if (s === 0) {
+    const valid = slotHasSave(0, storage);
+    if (!valid) {
+      storage.removeItem(LEGACY_SAVE_KEY);
+      storage.removeItem(LEGACY_META_KEY);
+    }
+    return valid;
+  }
   const save = storage.getItem(saveKey(s));
   if (!slotHasSave(s, storage)) {
     storage.removeItem(LEGACY_SAVE_KEY);
@@ -162,7 +169,7 @@ function boot() {
   });
   document.getElementById('contBtn')?.addEventListener('click', () => {
     const active = getActiveSlot(localStorage);
-    if (active > 0) syncSelectedSlotToLegacy(active, localStorage);
+    syncSelectedSlotToLegacy(active, localStorage);
   }, true);
 }
 

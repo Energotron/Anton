@@ -72,3 +72,19 @@ test('clears stale legacy mirror when selected extra slot has no save', () => {
   assert.equal(storage.getItem(LEGACY_SAVE_KEY), null);
   assert.equal(storage.getItem(LEGACY_META_KEY), null);
 });
+
+test('clears corrupt legacy slot zero before continue can consume it', () => {
+  const values = new Map([
+    [LEGACY_SAVE_KEY, '{broken'],
+    [LEGACY_META_KEY, '{"sys":"Старая"}']
+  ]);
+  const storage = {
+    getItem: key => values.has(key) ? values.get(key) : null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: key => values.delete(key)
+  };
+
+  assert.equal(syncSelectedSlotToLegacy(0, storage), false);
+  assert.equal(storage.getItem(LEGACY_SAVE_KEY), null);
+  assert.equal(storage.getItem(LEGACY_META_KEY), null);
+});
