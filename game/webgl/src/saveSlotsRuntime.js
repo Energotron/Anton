@@ -2,6 +2,8 @@ export const SLOT_COUNT = 5;
 export const ACTIVE_SLOT_KEY = 'kr3_active_save_slot';
 export const LEGACY_SAVE_KEY = 'kr3_save_slot0';
 export const LEGACY_META_KEY = 'kr3_save_meta';
+export const PRIMARY_SLOT_BACKUP_KEY = 'kr3_save_slot0_primary';
+export const PRIMARY_META_BACKUP_KEY = 'kr3_save_meta_slot0_primary';
 
 export function normalizeSlot(value) {
   const n = Number(value);
@@ -34,10 +36,9 @@ function readJson(storage, key) {
   } catch (_) { return null; }
 }
 
-export function slotHasSave(slot, storage = localStorage) {
+function isValidSaveRaw(raw) {
+  if (!raw) return false;
   try {
-    const raw = storage.getItem(saveKey(slot));
-    if (!raw) return false;
     const parsed = JSON.parse(raw);
     return !!parsed && typeof parsed === 'object' && !Array.isArray(parsed);
   } catch (_) { return false; }
@@ -45,6 +46,48 @@ export function slotHasSave(slot, storage = localStorage) {
 
 function getActiveSlot(storage = localStorage) {
   return normalizeSlot(storage.getItem(ACTIVE_SLOT_KEY));
+}
+
+function primarySaveRaw(storage = localStorage) {
+  const backup = storage.getItem(PRIMARY_SLOT_BACKUP_KEY);
+  if (isValidSaveRaw(backup)) return backup;
+  return getActiveSlot(storage) === 0 ? storage.getItem(LEGACY_SAVE_KEY) : null;
+}
+
+function primaryMetaRaw(storage = localStorage) {
+  const backup = storage.getItem(PRIMARY_META_BACKUP_KEY);
+  if (backup) return backup;
+  return getActiveSlot(storage) === 0 ? storage.getItem(LEGACY_META_KEY) : null;
+}
+
+function preservePrimarySlot(storage = localStorage) {
+  if (getActiveSlot(storage) !== 0) return;
+  const save = storage.getItem(LEGACY_SAVE_KEY);
+  if (!isValidSaveRaw(save)) return;
+  storage.setItem(PRIMARY_SLOT_BACKUP_KEY, save);
+  const meta = storage.getItem(LEGACY_META_KEY);
+  if (meta) storage.setItem(PRIMARY_META_BACKUP_KEY, meta);
+  else storage.removeItem(PRIMARY_META_BACKUP_KEY);
+}
+
+export function slotHasSave(slot, storage = localStorage) {
+  const s = normalizeSlot(slot);
+  if (s === 0) return isValidSaveRaw(primarySaveRaw(storage));
+  return isValidSaveRaw(storage.getItem(saveKey(s)));
+}
+
+function readSlotMeta(slot, storage = localStorage) {
+  const s = normalizeSlot(slot);
+  if (s === 0) {
+    const raw = primaryMetaRaw(storage);
+    try { return raw ? JSON.parse(raw) : null; } catch (_) { return null; }
+  }
+  return readJson(storage, metaKey(s));
+}
+
+function slotHasMeta(slot, storage = localStorage) {
+  const s = normalizeSlot(slot);
+  return !!(s === 0 ? primaryMetaRaw(storage) : storage.getItem(metaKey(s)));
 }
 
 function setActiveSlot(slot, storage = localStorage) {
@@ -56,12 +99,16 @@ function setActiveSlot(slot, storage = localStorage) {
 export function syncSelectedSlotToLegacy(slot, storage = localStorage) {
   const s = normalizeSlot(slot);
   if (s === 0) {
-    const valid = slotHasSave(0, storage);
-    if (!valid) {
+    const save = primarySaveRaw(storage);
+    if (!isValidSaveRaw(save)) {
       storage.removeItem(LEGACY_SAVE_KEY);
       storage.removeItem(LEGACY_META_KEY);
+      return false;
     }
-    return valid;
+    storage.setItem(LEGACY_SAVE_KEY, save);
+    const meta = primaryMetaRaw(storage);
+    if (meta) storage.setItem(LEGACY_META_KEY, meta); else storage.removeItem(LEGACY_META_KEY);
+    return true;
   }
   const save = storage.getItem(saveKey(s));
   if (!slotHasSave(s, storage)) {
@@ -78,9 +125,11 @@ export function syncSelectedSlotToLegacy(slot, storage = localStorage) {
 export function activateSlotForLoad(slot, storage = localStorage) {
   const previous = getActiveSlot(storage);
   const next = normalizeSlot(slot);
+  if (previous === 0 && next !== 0) preservePrimarySlot(storage);
   setActiveSlot(next, storage);
   if (syncSelectedSlotToLegacy(next, storage)) return true;
   setActiveSlot(previous, storage);
+  if (previous === 0) syncSelectedSlotToLegacy(0, storage);
   return false;
 }
 
@@ -93,7 +142,11 @@ function installWriteMirror(storage = localStorage) {
     originalSetItem.call(this, key, value);
     if (this !== storage) return;
     const active = getActiveSlot(storage);
-    if (active === 0) return;
+    if (active === 0) {
+      if (key === LEGACY_SAVE_KEY) originalSetItem.call(this, PRIMARY_SLOT_BACKUP_KEY, value);
+      if (key === LEGACY_META_KEY) originalSetItem.call(this, PRIMARY_META_BACKUP_KEY, value);
+      return;
+    }
     if (key === LEGACY_SAVE_KEY) originalSetItem.call(this, saveKey(active), value);
     if (key === LEGACY_META_KEY) originalSetItem.call(this, metaKey(active), value);
   };
@@ -120,8 +173,8 @@ function renderSlots(panel, storage = localStorage) {
   list.innerHTML = '';
   for (let slot = 0; slot < SLOT_COUNT; slot++) {
     const hasSave = slotHasSave(slot, storage);
-    const meta = readJson(storage, metaKey(slot));
-    const hasMeta = !!storage.getItem(metaKey(slot));
+    const meta = readSlotMeta(slot, storage);
+    const hasMeta = slotHasMeta(slot, storage);
     const row = document.createElement('div');
     row.style.cssText = `padding:12px;border:1px solid ${slot === active ? '#7ee787' : '#4ec9ff44'};border-radius:10px;background:#101b30`;
     row.innerHTML = `<div style="font-weight:700;margin-bottom:8px">${formatSlotMeta(slot, hasSave ? (meta || {}) : null)}${slot === active ? ' · АКТИВНЫЙ' : ''}</div>
@@ -138,6 +191,7 @@ function renderSlots(panel, storage = localStorage) {
 function boot() {
   if (typeof window === 'undefined' || typeof document === 'undefined' || typeof localStorage === 'undefined') return;
   installWriteMirror(localStorage);
+  if (getActiveSlot(localStorage) === 0) preservePrimarySlot(localStorage);
   const menuInner = document.getElementById('menuInner');
   if (!menuInner) return;
   const panel = createSlotPanel();
@@ -164,6 +218,7 @@ function boot() {
     }
     slot = getSlot('data-slot-new');
     if (slot !== null) {
+      if (getActiveSlot(localStorage) === 0 && slot !== 0) preservePrimarySlot(localStorage);
       setActiveSlot(slot); panel.style.display = 'none';
       document.getElementById('btnNewGame')?.click();
       return;
@@ -171,8 +226,20 @@ function boot() {
     slot = getSlot('data-slot-delete');
     if (slot !== null) {
       if (!window.confirm(`Очистить слот ${slot + 1}?`)) return;
-      localStorage.removeItem(saveKey(slot)); localStorage.removeItem(metaKey(slot));
-      if (slot === 0) localStorage.removeItem(LEGACY_META_KEY);
+      if (slot === 0) {
+        localStorage.removeItem(PRIMARY_SLOT_BACKUP_KEY);
+        localStorage.removeItem(PRIMARY_META_BACKUP_KEY);
+        if (getActiveSlot(localStorage) === 0) {
+          localStorage.removeItem(LEGACY_SAVE_KEY);
+          localStorage.removeItem(LEGACY_META_KEY);
+        }
+      } else {
+        localStorage.removeItem(saveKey(slot)); localStorage.removeItem(metaKey(slot));
+        if (slot === getActiveSlot(localStorage)) {
+          localStorage.removeItem(LEGACY_SAVE_KEY);
+          localStorage.removeItem(LEGACY_META_KEY);
+        }
+      }
       renderSlots(panel); return;
     }
   });
