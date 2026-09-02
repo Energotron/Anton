@@ -71,7 +71,7 @@ export function planSalvagePickup(player, loot) {
 export function applySalvagePickup(player, loot) {
   const plan = planSalvagePickup(player, loot);
   if (plan.take <= 0) return plan;
-  if (!player.cargo || typeof player.cargo !== 'object') player.cargo = {};
+  if (!player.cargo || typeof player.cargo !== 'object' || Array.isArray(player.cargo)) player.cargo = {};
   player.cargo[loot.goodId] = (Number(player.cargo[loot.goodId]) || 0) + plan.take;
   loot.amount = plan.remaining;
   return plan;

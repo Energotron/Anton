@@ -27,6 +27,17 @@ test('cargo helpers recover from missing or malformed legacy cargo state', () =>
   assert.deepEqual(player.cargo, { ore: 2 });
 });
 
+test('salvage pickup normalizes array cargo so hold capacity remains enforceable', () => {
+  const player = { cap: 2, cargo: [] };
+  const first = { goodId: 'ore', amount: 2 };
+  assert.deepEqual(applySalvagePickup(player, first), { take: 2, remaining: 0, reason: 'ok' });
+  assert.deepEqual(player.cargo, { ore: 2 });
+  assert.equal(cargoUsed(player.cargo), 2);
+
+  const second = { goodId: 'mach', amount: 1 };
+  assert.deepEqual(planSalvagePickup(player, second), { take: 0, remaining: 1, reason: 'full' });
+});
+
 test('buildSalvageDrop only creates loot for pirate faction ships', () => {
   assert.equal(buildSalvageDrop({ uid: 1, fac: 'fed', type: 'trader' }, 0, 0), null);
   assert.deepEqual(
