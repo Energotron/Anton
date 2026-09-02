@@ -19,6 +19,10 @@ function cloneSave(save) {
   };
 }
 
+export function canAcceptDelivery(save = null) {
+  return !save?.G?.activeQuest;
+}
+
 export function abandonSavedDelivery(save = null) {
   const next = cloneSave(save);
   const quest = next?.G?.activeQuest || null;
@@ -79,6 +83,16 @@ function showOutcome(doc, outcome) {
   setTimeout(() => node.remove(), 4200);
 }
 
+function showActiveContractNotice(doc) {
+  const host = doc?.getElementById?.('toasts') || doc?.body;
+  if (!host || !doc?.createElement) return;
+  const node = doc.createElement('div');
+  node.textContent = 'Сначала завершите или отмените активный контракт.';
+  node.style.cssText = 'pointer-events:none;margin:6px;padding:8px 10px;border:1px solid rgba(255,190,90,.45);background:rgba(35,24,7,.94);color:#ffe5a8;font-size:12px;border-radius:6px';
+  host.appendChild(node);
+  setTimeout(() => node.remove(), 3200);
+}
+
 export function abandonCurrentDelivery(win = globalThis?.window) {
   const storage = win?.localStorage;
   if (!storage) return { changed: false, status: 'unavailable' };
@@ -128,6 +142,17 @@ export function installContractAbandonRuntime(win = globalThis?.window) {
     refreshLiveSave(win);
     decorateAbandonControl(doc, win.localStorage);
   };
+
+  doc.addEventListener('click', event => {
+    const accept = event.target?.closest?.('[data-take]');
+    if (!accept) return;
+    refreshLiveSave(win);
+    if (canAcceptDelivery(readSave(win.localStorage))) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    showActiveContractNotice(doc);
+  }, true);
 
   doc.addEventListener('click', event => {
     const button = event.target?.closest?.('[data-abandon-delivery]');

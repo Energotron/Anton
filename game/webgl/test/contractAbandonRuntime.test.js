@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { abandonSavedDelivery } from '../src/contractAbandonRuntime.js';
+import { abandonSavedDelivery, canAcceptDelivery } from '../src/contractAbandonRuntime.js';
 
 function baseSave() {
   return {
@@ -43,4 +43,12 @@ test('no active contract leaves save untouched', () => {
   const outcome = abandonSavedDelivery(save);
   assert.equal(outcome.changed, false);
   assert.strictEqual(outcome.save, save);
+});
+
+test('blocks accepting another delivery while a contract is active', () => {
+  assert.equal(canAcceptDelivery(baseSave()), false);
+  const save = baseSave();
+  save.G.activeQuest = null;
+  assert.equal(canAcceptDelivery(save), true);
+  assert.equal(canAcceptDelivery(null), true);
 });
