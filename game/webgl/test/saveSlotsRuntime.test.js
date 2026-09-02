@@ -32,6 +32,31 @@ test('recognizes save payload even when metadata is missing', () => {
   assert.match(formatSlotMeta(2, {}), /неизвестная система/);
 });
 
+test('rejects malformed and non-object save payloads', () => {
+  for (const raw of ['{broken', 'null', '42', '"save"', '[1,2]']) {
+    const values = new Map([[saveKey(2), raw]]);
+    const storage = { getItem: key => values.has(key) ? values.get(key) : null };
+    assert.equal(slotHasSave(2, storage), false, raw);
+  }
+});
+
+test('does not mirror a corrupt extra slot into legacy continue state', () => {
+  const values = new Map([
+    [saveKey(2), '{broken'],
+    [metaKey(2), '{"sys":"Солнце"}'],
+    [LEGACY_SAVE_KEY, '{"stale":true}'],
+    [LEGACY_META_KEY, '{"sys":"Старая"}']
+  ]);
+  const storage = {
+    getItem: key => values.has(key) ? values.get(key) : null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: key => values.delete(key)
+  };
+  assert.equal(syncSelectedSlotToLegacy(2, storage), false);
+  assert.equal(storage.getItem(LEGACY_SAVE_KEY), null);
+  assert.equal(storage.getItem(LEGACY_META_KEY), null);
+});
+
 test('clears stale legacy mirror when selected extra slot has no save', () => {
   const values = new Map([
     [LEGACY_SAVE_KEY, '{"stale":true}'],

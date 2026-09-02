@@ -35,8 +35,12 @@ function readJson(storage, key) {
 }
 
 export function slotHasSave(slot, storage = localStorage) {
-  try { return !!storage.getItem(saveKey(slot)); }
-  catch (_) { return false; }
+  try {
+    const raw = storage.getItem(saveKey(slot));
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    return !!parsed && typeof parsed === 'object' && !Array.isArray(parsed);
+  } catch (_) { return false; }
 }
 
 function getActiveSlot(storage = localStorage) {
@@ -51,9 +55,9 @@ function setActiveSlot(slot, storage = localStorage) {
 
 export function syncSelectedSlotToLegacy(slot, storage = localStorage) {
   const s = normalizeSlot(slot);
-  if (s === 0) return !!storage.getItem(LEGACY_SAVE_KEY);
+  if (s === 0) return slotHasSave(0, storage);
   const save = storage.getItem(saveKey(s));
-  if (!save) {
+  if (!slotHasSave(s, storage)) {
     storage.removeItem(LEGACY_SAVE_KEY);
     storage.removeItem(LEGACY_META_KEY);
     return false;
