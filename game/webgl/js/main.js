@@ -10,6 +10,7 @@ import { applyTradeReputation } from '../src/tradeReputationCore.js';
 import { applyPlayerHit } from '../src/combatDamageCore.js';
 import { applyAttackReputation } from '../src/combatReputationCore.js';
 import { npcAggressionResponse } from '../src/npcAggressionResponseCore.js';
+import { findDistressResponder } from '../src/npcDistressCallCore.js';
 
 function showErr(m) {
   try { const b = document.getElementById('errBox'); b.style.display = 'block'; b.textContent = 'Ошибка: ' + m; } catch (e) {}
@@ -666,14 +667,20 @@ function resolvePlayerShot() {
       alreadyAggressed: tgt.playerAggressed,
     });
     P.rep = aggression.reputation;
-    if (aggression.applied) tgt.playerAggressed = true;
+    let distressResponder = null;
+    if (aggression.applied) {
+      tgt.playerAggressed = true;
+      distressResponder = findDistressResponder(tgt, demoShips);
+      if (distressResponder) distressResponder.playerAggressed = true;
+    }
     const reputationNote = aggression.delta
       ? ` · репутация ${aggression.delta > 0 ? '+' : ''}${aggression.delta}`
       : '';
+    const distressNote = distressResponder ? ` · SOS: патруль #${distressResponder.uid}` : '';
     R.boom(tgt.x, tgt.y, hit.destroyed ? 28 : 13, FACS[tgt.fac]?.c || '#ff7043');
     if (!hit.destroyed) {
       sfx.hit(); G.shake = 3;
-      toast(`🎯 Попадание −${hit.damage} · корпус ${Math.ceil(hit.hull)}${reputationNote}`, aggression.applied ? 'bad' : '');
+      toast(`🎯 Попадание −${hit.damage} · корпус ${Math.ceil(hit.hull)}${reputationNote}${distressNote}`, aggression.applied ? 'bad' : '');
       return;
     }
     sfx.boom(); G.shake = 7;
@@ -681,7 +688,7 @@ function resolvePlayerShot() {
     demoShips = demoShips.filter(s => s.uid !== tgt.uid);
     G.targetShip = null;
     P.kills++; P.xp += 18;
-    toast(`☠️ Уничтожен${reputationNote}`, aggression.applied ? 'bad' : 'good');
+    toast(`☠️ Уничтожен${reputationNote}${distressNote}`, aggression.applied ? 'bad' : 'good');
     setTimeout(() => {
       if (G.state === 'menu') return;
       const S = systems[G.sysId];
