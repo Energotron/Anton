@@ -56,6 +56,7 @@ function salvageGoodName(goodId) {
 
 export function contactDisposition(contact = {}, reputation = 0) {
   if (contact.fac === 'pir' || contact.type === 'pirate' || contact.type === 'raider') return 'hostile';
+  if (contact.playerAggressed) return 'hostile';
   if (reputation < -20) return 'hostile';
   if (reputation < 0) return 'cold';
   if (reputation >= 20) return 'friendly';
@@ -83,6 +84,7 @@ export function listRadioContacts(save = null) {
         hull: Math.max(0, Math.round(finite(ship.hull))),
         distance: Math.round(d),
         reputation,
+        playerAggressed: !!ship.playerAggressed,
         disposition: contactDisposition(ship, reputation),
       };
     })
@@ -171,6 +173,12 @@ export function buildHailProfile(contact, save = null) {
     status = danger >= 4
       ? `Здесь опасный сектор, и это нам нравится. ${systemName} сейчас оценивается в ${danger}/5.${salvageIntel}`
       : `Мы работаем на этой трассе. ${systemName}: риск ${danger}/5.${salvageIntel}`;
+  }
+
+  if (contact.playerAggressed && contact.type === 'patrol') {
+    status = `Вы опознаны как агрессор. Патруль ведёт перехват в системе ${systemName}; остановите корабль и прекратите огонь.`;
+  } else if (contact.playerAggressed && contact.type === 'trader') {
+    status = `Нападение зарегистрировано. Торговое судно уходит из зоны огня и передало патрулю сигнал SOS в системе ${systemName}.`;
   }
 
   return {

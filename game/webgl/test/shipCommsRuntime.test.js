@@ -33,6 +33,34 @@ test('disposition is driven by faction hostility and player reputation', () => {
   assert.equal(contactDisposition({ fac: 'pir', type: 'pirate' }, 99), 'hostile');
 });
 
+test('recorded player aggression overrides otherwise friendly reputation', () => {
+  assert.equal(contactDisposition({ fac: 'fed', type: 'patrol', playerAggressed: true }, 100), 'hostile');
+  assert.equal(contactDisposition({ fac: 'pel', type: 'trader', playerAggressed: true }, 100), 'hostile');
+});
+
+test('radio contact preserves aggression memory for the hail profile', () => {
+  const input = save({
+    P: { rep: { fed: 100 } },
+    demoShips: [{ uid: 1001, type: 'patrol', fac: 'fed', playerAggressed: true, x: 100, y: 0, hull: 55 }],
+  });
+  const [patrol] = listRadioContacts(input);
+
+  assert.equal(patrol.playerAggressed, true);
+  assert.equal(patrol.disposition, 'hostile');
+});
+
+test('aggressed patrol hail reports active interception', () => {
+  const input = save({
+    P: { rep: { fed: 100 } },
+    demoShips: [{ uid: 1001, type: 'patrol', fac: 'fed', playerAggressed: true, x: 100, y: 0, hull: 55 }],
+  });
+  const profile = buildHailProfile(listRadioContacts(input)[0], input);
+
+  assert.match(profile.opening, /Говори быстро/);
+  assert.match(profile.status, /опознаны как агрессор/);
+  assert.match(profile.status, /ведёт перехват/);
+});
+
 test('hail profile exposes real system danger and role-specific information', () => {
   const input = save();
   const patrol = listRadioContacts(input).find(c => c.uid === 1001);
