@@ -7,6 +7,7 @@ import { FACS, WEAPONS, ENGINES, SHIELDS, HULLS, CARGOS, RADARS, SHOPCATS, RANKS
 import { SYSNAMES_EXT } from './assets.js';
 import { WebGLRenderer } from './WebGLRenderer.js';
 import { applyTradeReputation } from '../src/tradeReputationCore.js';
+import { applyPlayerHit } from '../src/combatDamageCore.js';
 
 function showErr(m) {
   try { const b = document.getElementById('errBox'); b.style.display = 'block'; b.textContent = 'Ошибка: ' + m; } catch (e) {}
@@ -655,10 +656,18 @@ function resolvePlayerShot() {
   sfx.shoot();
   if (Math.random() < 0.9) {
     if (missile) P.missiles--;
-    R.boom(tgt.x, tgt.y, 28, FACS[tgt.fac]?.c || '#ff7043');
+    const hit = applyPlayerHit({ hull: tgt.hull, weaponDamage: P.weapon?.dmg, missile });
+    tgt.hull = hit.hull;
+    R.boom(tgt.x, tgt.y, hit.destroyed ? 28 : 13, FACS[tgt.fac]?.c || '#ff7043');
+    if (!hit.destroyed) {
+      sfx.hit(); G.shake = 3;
+      toast(`🎯 Попадание −${hit.damage} · корпус ${Math.ceil(hit.hull)}`);
+      return;
+    }
     sfx.boom(); G.shake = 7;
     R.removeShip(tgt.uid);
     demoShips = demoShips.filter(s => s.uid !== tgt.uid);
+    G.targetShip = null;
     P.kills++; P.xp += 18;
     toast('☠️ Уничтожен', 'good');
     setTimeout(() => {
