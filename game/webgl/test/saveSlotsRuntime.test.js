@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeSlot, saveKey, metaKey, formatSlotMeta, slotHasSave, syncSelectedSlotToLegacy, LEGACY_SAVE_KEY, LEGACY_META_KEY } from '../src/saveSlotsRuntime.js';
+import { normalizeSlot, saveKey, metaKey, formatSlotMeta, slotHasSave, syncSelectedSlotToLegacy, activateSlotForLoad, ACTIVE_SLOT_KEY, LEGACY_SAVE_KEY, LEGACY_META_KEY } from '../src/saveSlotsRuntime.js';
 
 test('normalizes save slots safely', () => {
   assert.equal(normalizeSlot(0), 0);
@@ -87,4 +87,33 @@ test('clears corrupt legacy slot zero before continue can consume it', () => {
   assert.equal(syncSelectedSlotToLegacy(0, storage), false);
   assert.equal(storage.getItem(LEGACY_SAVE_KEY), null);
   assert.equal(storage.getItem(LEGACY_META_KEY), null);
+});
+
+test('switching loads does not overwrite the previously active extra slot', () => {
+  const slotOneSave = '{"slot":1,"credits":111}';
+  const slotTwoSave = '{"slot":2,"credits":222}';
+  const values = new Map([
+    [ACTIVE_SLOT_KEY, '1'],
+    [saveKey(1), slotOneSave],
+    [metaKey(1), '{"sys":"Старая"}'],
+    [saveKey(2), slotTwoSave],
+    [metaKey(2), '{"sys":"Новая"}']
+  ]);
+  const storage = {
+    getItem: key => values.has(key) ? values.get(key) : null,
+    setItem: (key, value) => {
+      values.set(key, String(value));
+      const active = normalizeSlot(values.get(ACTIVE_SLOT_KEY));
+      if (active === 0) return;
+      if (key === LEGACY_SAVE_KEY) values.set(saveKey(active), String(value));
+      if (key === LEGACY_META_KEY) values.set(metaKey(active), String(value));
+    },
+    removeItem: key => values.delete(key)
+  };
+
+  assert.equal(activateSlotForLoad(2, storage), true);
+  assert.equal(storage.getItem(ACTIVE_SLOT_KEY), '2');
+  assert.equal(storage.getItem(LEGACY_SAVE_KEY), slotTwoSave);
+  assert.equal(storage.getItem(saveKey(1)), slotOneSave);
+  assert.equal(storage.getItem(saveKey(2)), slotTwoSave);
 });
