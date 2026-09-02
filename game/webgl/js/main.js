@@ -8,6 +8,7 @@ import { SYSNAMES_EXT } from './assets.js';
 import { WebGLRenderer } from './WebGLRenderer.js';
 import { applyTradeReputation } from '../src/tradeReputationCore.js';
 import { applyPlayerHit } from '../src/combatDamageCore.js';
+import { applyAttackReputation } from '../src/combatReputationCore.js';
 
 function showErr(m) {
   try { const b = document.getElementById('errBox'); b.style.display = 'block'; b.textContent = 'Ошибка: ' + m; } catch (e) {}
@@ -658,10 +659,20 @@ function resolvePlayerShot() {
     if (missile) P.missiles--;
     const hit = applyPlayerHit({ hull: tgt.hull, weaponDamage: P.weapon?.dmg, missile });
     tgt.hull = hit.hull;
+    const aggression = applyAttackReputation({
+      reputation: P.rep,
+      faction: tgt.fac,
+      alreadyAggressed: tgt.playerAggressed,
+    });
+    P.rep = aggression.reputation;
+    if (aggression.applied) tgt.playerAggressed = true;
+    const reputationNote = aggression.delta
+      ? ` · репутация ${aggression.delta > 0 ? '+' : ''}${aggression.delta}`
+      : '';
     R.boom(tgt.x, tgt.y, hit.destroyed ? 28 : 13, FACS[tgt.fac]?.c || '#ff7043');
     if (!hit.destroyed) {
       sfx.hit(); G.shake = 3;
-      toast(`🎯 Попадание −${hit.damage} · корпус ${Math.ceil(hit.hull)}`);
+      toast(`🎯 Попадание −${hit.damage} · корпус ${Math.ceil(hit.hull)}${reputationNote}`, aggression.applied ? 'bad' : '');
       return;
     }
     sfx.boom(); G.shake = 7;
@@ -669,7 +680,7 @@ function resolvePlayerShot() {
     demoShips = demoShips.filter(s => s.uid !== tgt.uid);
     G.targetShip = null;
     P.kills++; P.xp += 18;
-    toast('☠️ Уничтожен', 'good');
+    toast(`☠️ Уничтожен${reputationNote}`, aggression.applied ? 'bad' : 'good');
     setTimeout(() => {
       if (G.state === 'menu') return;
       const S = systems[G.sysId];
@@ -792,7 +803,8 @@ function saveShipsToSystem(sysId) {
   systemShips[sysId] = demoShips.map(s => ({
     uid: s.uid, type: s.type, fac: s.fac,
     x: s.x, y: s.y, ang: s.ang || 0, spd: s.spd || 80,
-    wp: s.wp != null ? s.wp : null, hull: s.hull
+    wp: s.wp != null ? s.wp : null, hull: s.hull,
+    playerAggressed: !!s.playerAggressed
   }));
 }
 
