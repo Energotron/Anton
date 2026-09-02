@@ -12,6 +12,7 @@ const DROP_TABLE = Object.freeze({
 });
 
 export function cargoUsed(cargo = {}) {
+  if (!cargo || typeof cargo !== 'object' || Array.isArray(cargo)) return 0;
   return Object.values(cargo).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0);
 }
 

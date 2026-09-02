@@ -15,6 +15,18 @@ test('cargoUsed and cargoFree count cargo units against hold capacity', () => {
   assert.equal(cargoFree(player), 5);
 });
 
+test('cargo helpers recover from missing or malformed legacy cargo state', () => {
+  assert.equal(cargoUsed(null), 0);
+  assert.equal(cargoUsed('broken'), 0);
+  assert.equal(cargoUsed([]), 0);
+
+  const player = { cap: 5, cargo: null };
+  const loot = { goodId: 'ore', amount: 2 };
+  assert.equal(cargoFree(player), 5);
+  assert.deepEqual(applySalvagePickup(player, loot), { take: 2, remaining: 0, reason: 'ok' });
+  assert.deepEqual(player.cargo, { ore: 2 });
+});
+
 test('buildSalvageDrop only creates loot for pirate faction ships', () => {
   assert.equal(buildSalvageDrop({ uid: 1, fac: 'fed', type: 'trader' }, 0, 0), null);
   assert.deepEqual(
