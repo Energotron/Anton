@@ -38,6 +38,16 @@ test('recovers a canonical calendar for a valid save missing date fields', () =>
   assert.equal(input.G.date, undefined, 'input must not be mutated');
 });
 
+test('repairs impossible legacy calendar components from elapsed campaign day', () => {
+  const input = { v: 2, dateStr: '99.99.3500', G: { date: { year: 3500, month: 99, day: 99 }, day: 32 }, P: {} };
+  const { data, migrated } = migrateLegacyCampaignSave(input);
+  assert.equal(migrated, true);
+  assert.deepEqual(data.G.date, { year: 3550, month: 2, day: 1 });
+  assert.equal(data.dateStr, '01.02.3550');
+  assert.equal(data.calendarEpoch, CANONICAL_CAMPAIGN_YEAR);
+  assert.deepEqual(input.G.date, { year: 3500, month: 99, day: 99 }, 'input must not be mutated');
+});
+
 test('does not invent a calendar for unrelated JSON', () => {
   const input = { note: 'not a KR3 save' };
   const { data, migrated } = migrateLegacyCampaignSave(input);

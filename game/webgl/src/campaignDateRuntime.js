@@ -32,6 +32,16 @@ function isLeapYear(year) {
   return (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
 }
 
+function isValidCalendarDate(date) {
+  const year = Number(date?.year);
+  const month = Number(date?.month);
+  const day = Number(date?.day);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false;
+  if (month < 1 || month > 12 || day < 1) return false;
+  const monthDays = [31, 28 + (isLeapYear(year) ? 1 : 0), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= monthDays[month - 1];
+}
+
 function dateFromElapsedCampaignDay(value) {
   const elapsedDay = Math.max(1, Math.floor(Number(value) || 1));
   let remaining = elapsedDay - 1;
@@ -81,8 +91,8 @@ export function migrateLegacyCampaignSave(input) {
   const data = cloneJson(input);
   const date = data?.G?.date || parseDateString(data.dateStr);
   const year = Number(date?.year);
-  if (!Number.isFinite(year)) {
-    const validSaveShape = data?.P && typeof data.P === 'object' && data?.G && typeof data.G === 'object';
+  const validSaveShape = data?.P && typeof data.P === 'object' && data?.G && typeof data.G === 'object';
+  if (!Number.isFinite(year) || !isValidCalendarDate(date)) {
     if (!validSaveShape) return { data, migrated: false };
     const recoveredDate = dateFromElapsedCampaignDay(data.G.day ?? data.G.turn ?? data.turn ?? 1);
     data.G.date = recoveredDate;
