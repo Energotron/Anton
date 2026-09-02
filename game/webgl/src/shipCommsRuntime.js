@@ -100,8 +100,10 @@ export function summarizeSystemSalvage(save = null, systemId = null) {
   let fields = 0;
   let units = 0;
   for (const record of raw) {
-    const amount = Math.floor(finite(record?.amount, 0));
-    if (amount <= 0) continue;
+    const amount = Math.floor(Number(record?.amount));
+    const x = Number(record?.x);
+    const y = Number(record?.y);
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(x) || !Number.isFinite(y)) continue;
     fields++;
     units += amount;
   }
