@@ -75,6 +75,15 @@ export function syncSelectedSlotToLegacy(slot, storage = localStorage) {
   return true;
 }
 
+export function activateSlotForLoad(slot, storage = localStorage) {
+  const previous = getActiveSlot(storage);
+  const next = normalizeSlot(slot);
+  setActiveSlot(next, storage);
+  if (syncSelectedSlotToLegacy(next, storage)) return true;
+  setActiveSlot(previous, storage);
+  return false;
+}
+
 function installWriteMirror(storage = localStorage) {
   const proto = Object.getPrototypeOf(storage);
   if (!proto || proto.__kr3SlotsPatched) return;
@@ -148,8 +157,8 @@ function boot() {
     if (slot !== null) { setActiveSlot(slot); renderSlots(panel); return; }
     slot = getSlot('data-slot-load');
     if (slot !== null) {
-      if (!syncSelectedSlotToLegacy(slot)) return;
-      setActiveSlot(slot); panel.style.display = 'none';
+      if (!activateSlotForLoad(slot)) return;
+      panel.style.display = 'none';
       document.getElementById('contBtn')?.click();
       return;
     }
