@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeSlot, saveKey, metaKey, formatSlotMeta, syncSelectedSlotToLegacy, LEGACY_SAVE_KEY, LEGACY_META_KEY } from '../src/saveSlotsRuntime.js';
+import { normalizeSlot, saveKey, metaKey, formatSlotMeta, slotHasSave, syncSelectedSlotToLegacy, LEGACY_SAVE_KEY, LEGACY_META_KEY } from '../src/saveSlotsRuntime.js';
 
 test('normalizes save slots safely', () => {
   assert.equal(normalizeSlot(0), 0);
@@ -22,6 +22,14 @@ test('uses independent keys for extra slots', () => {
 test('formats empty and populated slot summaries', () => {
   assert.match(formatSlotMeta(1, null), /пусто/);
   assert.match(formatSlotMeta(1, { dateStr: '01.01.3500', sys: 'Солнце', money: 9000 }), /Солнце/);
+});
+
+test('recognizes save payload even when metadata is missing', () => {
+  const values = new Map([[saveKey(2), '{"sys":4,"day":18}']]);
+  const storage = { getItem: key => values.has(key) ? values.get(key) : null };
+  assert.equal(slotHasSave(2, storage), true);
+  assert.equal(slotHasSave(3, storage), false);
+  assert.match(formatSlotMeta(2, {}), /неизвестная система/);
 });
 
 test('clears stale legacy mirror when selected extra slot has no save', () => {

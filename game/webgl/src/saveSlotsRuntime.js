@@ -34,6 +34,11 @@ function readJson(storage, key) {
   } catch (_) { return null; }
 }
 
+export function slotHasSave(slot, storage = localStorage) {
+  try { return !!storage.getItem(saveKey(slot)); }
+  catch (_) { return false; }
+}
+
 function getActiveSlot(storage = localStorage) {
   return normalizeSlot(storage.getItem(ACTIVE_SLOT_KEY));
 }
@@ -94,15 +99,17 @@ function renderSlots(panel, storage = localStorage) {
   const active = getActiveSlot(storage);
   list.innerHTML = '';
   for (let slot = 0; slot < SLOT_COUNT; slot++) {
+    const hasSave = slotHasSave(slot, storage);
     const meta = readJson(storage, metaKey(slot));
+    const hasMeta = !!storage.getItem(metaKey(slot));
     const row = document.createElement('div');
     row.style.cssText = `padding:12px;border:1px solid ${slot === active ? '#7ee787' : '#4ec9ff44'};border-radius:10px;background:#101b30`;
-    row.innerHTML = `<div style="font-weight:700;margin-bottom:8px">${formatSlotMeta(slot, meta)}${slot === active ? ' · АКТИВНЫЙ' : ''}</div>
+    row.innerHTML = `<div style="font-weight:700;margin-bottom:8px">${formatSlotMeta(slot, hasSave ? (meta || {}) : null)}${slot === active ? ' · АКТИВНЫЙ' : ''}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn" data-slot-load="${slot}" ${meta ? '' : 'disabled'}>▶ Загрузить</button>
+        <button class="btn" data-slot-load="${slot}" ${hasSave ? '' : 'disabled'}>▶ Загрузить</button>
         <button class="btn" data-slot-select="${slot}">✓ Сделать активным</button>
         <button class="btn ghost" data-slot-new="${slot}">＋ Новая игра</button>
-        <button class="btn ghost" data-slot-delete="${slot}" ${meta ? '' : 'disabled'}>🗑 Очистить</button>
+        <button class="btn ghost" data-slot-delete="${slot}" ${hasSave || hasMeta ? '' : 'disabled'}>🗑 Очистить</button>
       </div>`;
     list.appendChild(row);
   }
