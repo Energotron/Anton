@@ -61,6 +61,8 @@ test('system salvage summary ignores invalid records and counts recoverable carg
           { goodId: 'ore', amount: 3, x: 10, y: 20 },
           { goodId: 'mach', amount: 2, x: 30, y: 40 },
           { goodId: 'weap', amount: 0, x: 50, y: 60 },
+          { goodId: 'ore', amount: 7, x: 'bad', y: 70 },
+          { goodId: 'mach', amount: 9, x: 80, y: Infinity },
         ],
       },
     },
