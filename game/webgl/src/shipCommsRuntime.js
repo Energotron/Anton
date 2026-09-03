@@ -1,4 +1,5 @@
 import { GOODS } from '../js/data.js';
+import { payWantedFine, wantedFineAvailability } from './wantedFineCore.js';
 
 export const SAVE_KEY = 'kr3_save_slot0';
 
@@ -246,7 +247,11 @@ function renderConversation(win, contact) {
     return;
   }
   const profile = buildHailProfile(liveContact, save);
-  panel.innerHTML = `<div class="pbox"><h2>📡 Канал связи</h2><div class="sub">${esc(profile.identity)} · ${profile.distance} м · репутация ${profile.reputation >= 0 ? '+' : ''}${profile.reputation}</div><div class="evTxt" style="margin-top:10px"><b>Входящий ответ:</b><br>${esc(profile.opening)}</div><div class="prow"><button class="btn" id="commsIdentify">Идентификация</button><button class="btn" id="commsStatus">Обстановка</button></div><div class="evTxt" id="commsReply">Выберите запрос.</div><div class="prow"><button class="btn ghost" id="commsBack">← Контакты</button><button class="btn ghost" id="commsClose">Закрыть</button></div></div>`;
+  const fine = wantedFineAvailability(save);
+  const fineButton = liveContact.type === 'patrol' && fine.reason !== 'no_wanted'
+    ? `<button class="btn" id="commsFine"${fine.available ? '' : ' disabled'}>⚖️ Штраф — ${fine.fine} кр.</button>`
+    : '';
+  panel.innerHTML = `<div class="pbox"><h2>📡 Канал связи</h2><div class="sub">${esc(profile.identity)} · ${profile.distance} м · репутация ${profile.reputation >= 0 ? '+' : ''}${profile.reputation}</div><div class="evTxt" style="margin-top:10px"><b>Входящий ответ:</b><br>${esc(profile.opening)}</div><div class="prow"><button class="btn" id="commsIdentify">Идентификация</button><button class="btn" id="commsStatus">Обстановка</button>${fineButton}</div><div class="evTxt" id="commsReply">Выберите запрос.</div><div class="prow"><button class="btn ghost" id="commsBack">← Контакты</button><button class="btn ghost" id="commsClose">Закрыть</button></div></div>`;
   win.document.getElementById('commsIdentify')?.addEventListener('click', () => {
     const reply = win.document.getElementById('commsReply');
     if (reply) reply.textContent = profile.identity;
@@ -254,6 +259,16 @@ function renderConversation(win, contact) {
   win.document.getElementById('commsStatus')?.addEventListener('click', () => {
     const reply = win.document.getElementById('commsReply');
     if (reply) reply.textContent = profile.status;
+  });
+  win.document.getElementById('commsFine')?.addEventListener('click', () => {
+    const outcome = payWantedFine(readSave(win.localStorage));
+    if (!outcome.changed) return renderConversation(win, contact);
+    win.localStorage.setItem(SAVE_KEY, JSON.stringify(outcome.save));
+    if (typeof win.loadGame === 'function') {
+      try { win.loadGame(0); } catch {}
+    }
+    try { win.dispatchEvent(new CustomEvent('kr3:wanted-fine-paid', { detail: outcome })); } catch {}
+    renderConversation(win, contact);
   });
   win.document.getElementById('commsBack')?.addEventListener('click', () => showShipCommsPanel(win));
   win.document.getElementById('commsClose')?.addEventListener('click', () => closePanel(win));
