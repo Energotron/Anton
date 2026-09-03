@@ -735,10 +735,11 @@ function enemyPhase() {
   const movers = [];
   const S = systems[G.sysId];
   const nPl = S && S.planets ? S.planets.length : 0;
+  const systemWanted = systemWantedStatus(G.systemWantedUntil, G.sysId, G.turn).active;
   for (const s of demoShips) {
     // waypoint: planet index or {x,y}
     let tx, ty;
-    const aggressionResponse = npcAggressionResponse(s, P);
+    const aggressionResponse = npcAggressionResponse(s, P, { systemWanted });
     if (aggressionResponse.overrideNavigation) {
       tx = aggressionResponse.targetX;
       ty = aggressionResponse.targetY;

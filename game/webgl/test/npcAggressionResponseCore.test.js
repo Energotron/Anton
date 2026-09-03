@@ -16,6 +16,39 @@ test('attacked patrol pursues the player and may return fire', () => {
   );
 });
 
+test('untouched patrol pursues the player while the system wanted alert is active', () => {
+  assert.deepEqual(
+    npcAggressionResponse(
+      { type: 'patrol', fac: 'fed', x: 100, y: 50 },
+      { x: -20, y: 30 },
+      { systemWanted: true },
+    ),
+    { mode: 'retaliate', overrideNavigation: true, canFire: true, targetX: -20, targetY: 30 },
+  );
+});
+
+test('system wanted alert does not divert an untouched trader', () => {
+  assert.deepEqual(
+    npcAggressionResponse(
+      { type: 'trader', fac: 'pel', x: 100, y: 50 },
+      { x: -20, y: 30 },
+      { systemWanted: true },
+    ),
+    { mode: 'route', overrideNavigation: false, canFire: false },
+  );
+});
+
+test('untouched patrol returns to its route after the system wanted alert expires', () => {
+  assert.deepEqual(
+    npcAggressionResponse(
+      { type: 'patrol', fac: 'fed', x: 100, y: 50 },
+      { x: -20, y: 30 },
+      { systemWanted: false },
+    ),
+    { mode: 'route', overrideNavigation: false, canFire: false },
+  );
+});
+
 test('attacked trader flees directly away from the player', () => {
   const result = npcAggressionResponse(
     { type: 'trader', fac: 'pel', playerAggressed: true, x: 100, y: 0 },

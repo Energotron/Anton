@@ -5,8 +5,9 @@ function finite(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
-export function npcAggressionResponse(ship = {}, player = {}) {
-  if (!ship.playerAggressed || ship.fac === 'pir') {
+export function npcAggressionResponse(ship = {}, player = {}, context = {}) {
+  const wantedPatrol = ship.type === 'patrol' && context.systemWanted === true;
+  if ((!ship.playerAggressed && !wantedPatrol) || ship.fac === 'pir') {
     return { mode: 'route', overrideNavigation: false, canFire: false };
   }
 
