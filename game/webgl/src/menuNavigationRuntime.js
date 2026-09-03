@@ -1,7 +1,5 @@
 export function endGameSession(doc = document, win = window) {
   try { win.close(); } catch (_) {}
-  // Browsers normally refuse window.close() for tabs not opened by script.
-  // Fall back to a deterministic exited state instead of leaving gameplay active.
   setTimeout(() => {
     if (!doc || !doc.body) return;
     doc.body.innerHTML = `
@@ -17,22 +15,68 @@ export function endGameSession(doc = document, win = window) {
 }
 
 export function goToMainMenu(win = window) {
-  // Reloading is intentional: it clears transient gameplay overlays, listeners,
-  // camera state and modal traps while preserving local save slots.
   win.location.reload();
 }
 
+function showStartupError(doc, message) {
+  const box = doc.getElementById('errBox');
+  if (box) {
+    box.style.display = 'block';
+    box.textContent = 'Ошибка запуска: ' + message;
+  }
+}
+
+function callStartNewGame(doc, win, button) {
+  if (button.dataset.kr3Starting === '1') return;
+  button.dataset.kr3Starting = '1';
+  button.disabled = true;
+
+  let attempts = 0;
+  const invoke = () => {
+    attempts += 1;
+    if (typeof win.startNewGame === 'function') {
+      try {
+        win.startNewGame();
+      } catch (err) {
+        showStartupError(doc, err?.message || String(err));
+      } finally {
+        setTimeout(() => {
+          button.dataset.kr3Starting = '0';
+          button.disabled = false;
+        }, 600);
+      }
+      return;
+    }
+
+    // main.js is a module and can finish slightly after this navigation module.
+    if (attempts < 20) {
+      setTimeout(invoke, 50);
+      return;
+    }
+
+    button.dataset.kr3Starting = '0';
+    button.disabled = false;
+    showStartupError(doc, 'основной игровой модуль не загрузился');
+  };
+
+  invoke();
+}
+
 export function bindMenuNavigation(doc = document, win = window) {
-  const newGame = doc.getElementById('btnNewGame');
-  if (newGame && !newGame.dataset.kr3SingleStartBound) {
+  const oldNewGame = doc.getElementById('btnNewGame');
+  if (oldNewGame && !oldNewGame.dataset.kr3SingleStartBound) {
+    // main.js historically installs two anonymous click handlers on this button.
+    // Replacing the node is the only deterministic way to remove both anonymous
+    // listeners without modifying or shrinking the canonical main.js runtime.
+    const newGame = oldNewGame.cloneNode(true);
     newGame.dataset.kr3SingleStartBound = '1';
-    // main.js historically attached two bubble handlers to this control.
-    // Capture first and stop them so one user action creates exactly one game.
+    newGame.disabled = false;
+    oldNewGame.replaceWith(newGame);
     newGame.addEventListener('click', (event) => {
       event.preventDefault();
-      event.stopImmediatePropagation();
-      if (typeof win.startNewGame === 'function') win.startNewGame();
-    }, true);
+      event.stopPropagation();
+      callStartNewGame(doc, win, newGame);
+    });
   }
 
   const menuButton = doc.getElementById('menuBtn');
