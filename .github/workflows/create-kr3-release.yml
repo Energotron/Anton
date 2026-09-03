@@ -114,7 +114,7 @@ jobs:
             git ls-files > /tmp/release-changes.txt
           fi
 
-          if ! grep -Eq '^game/webgl/(index\.html|js/|css/|public/|manifest\.json|package\.json|music/)' /tmp/release-changes.txt; then
+          if ! grep -Eq '^game/webgl/(index\.html|js/|src/|css/|public/|manifest\.json|package\.json|vite\.config\.js|music/)' /tmp/release-changes.txt; then
             echo 'Agent requested a release, but no playable WebGL runtime files changed since the latest release.' >&2
             exit 1
           fi
@@ -140,18 +140,32 @@ jobs:
         if: steps.guard.outputs.skip != 'true'
         run: npm run build --prefix game/webgl
 
-      - name: Verify canonical runtime payload
+      - name: Assemble and verify portable runtime
         if: steps.guard.outputs.skip != 'true'
         shell: bash
         run: |
           set -euo pipefail
-          test -s game/webgl/index.html
-          test -s game/webgl/js/main.js
-          test -s game/webgl/js/WebGLRenderer.js
-          test -s game/webgl/js/assets.js
+          mkdir -p game/webgl/dist/music
+          cp -a game/webgl/music/. game/webgl/dist/music/
+
+          test -s game/webgl/dist/index.html
+          test -d game/webgl/dist/assets
           for track in flight fighter human gaal fei quasar peleng maloc; do
-            test -s "game/webgl/music/${track}.mp3"
+            test -s "game/webgl/dist/music/${track}.mp3"
           done
+
+          if grep -Eq '(src|href)="/assets/' game/webgl/dist/index.html; then
+            echo 'Production index contains root-absolute /assets URLs.' >&2
+            exit 1
+          fi
+          if grep -RIEq "from ['\"]three['\"]|import[[:space:]]*\(['\"]three['\"]\)" game/webgl/dist/assets; then
+            echo 'Production bundle still contains a bare three import.' >&2
+            exit 1
+          fi
+          if grep -Eq 'src="[^\"]*(js/main|src/)' game/webgl/dist/index.html; then
+            echo 'Production index still points at raw KR3 source modules.' >&2
+            exit 1
+          fi
 
       - name: Package verified WebGL game
         if: steps.guard.outputs.skip != 'true'
@@ -163,10 +177,10 @@ jobs:
           set -euo pipefail
           SAFE_TAG="${TAG//\//-}"
           ARCHIVE="Space-Rangers-3-WebGL-${SAFE_TAG}.zip"
-          zip -r "$ARCHIVE" game/webgl \
-            -x 'game/webgl/node_modules/*' \
-               'game/webgl/test/*' \
-               'game/webgl/src/*'
+          (
+            cd game/webgl/dist
+            zip -r "$GITHUB_WORKSPACE/$ARCHIVE" .
+          )
           unzip -tq "$ARCHIVE"
           sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
           echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
