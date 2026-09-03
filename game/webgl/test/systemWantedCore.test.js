@@ -1,7 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { SYSTEM_WANTED_TURNS, normalizeSystemWanted, recordSystemWanted, systemWantedStatus, wantedPortAccess } from '../src/systemWantedCore.js';
+import {
+  SYSTEM_WANTED_MAX_TURNS,
+  SYSTEM_WANTED_REPEAT_TURNS,
+  SYSTEM_WANTED_TURNS,
+  normalizeSystemWanted,
+  recordSystemWanted,
+  systemWantedStatus,
+  wantedPortAccess,
+} from '../src/systemWantedCore.js';
 
 test('faction aggression creates a five-turn local wanted status', () => {
   const wanted = recordSystemWanted({}, 7, 12);
@@ -49,8 +57,33 @@ test('a repeated crime extends but never shortens an existing alert', () => {
   const existing = { 7: 30 };
 
   assert.deepEqual(recordSystemWanted(existing, 7, 12), { 7: 30 });
-  assert.deepEqual(recordSystemWanted(existing, 7, 28), { 7: 33 });
+  assert.deepEqual(recordSystemWanted(existing, 7, 28), { 7: 35 });
   assert.deepEqual(existing, { 7: 30 });
+});
+
+test('a new victim during the same turn escalates an active warrant', () => {
+  const initial = recordSystemWanted({}, 7, 12);
+
+  assert.deepEqual(recordSystemWanted(initial, 7, 12), {
+    7: 12 + SYSTEM_WANTED_TURNS + SYSTEM_WANTED_REPEAT_TURNS,
+  });
+});
+
+test('repeat offense escalation is capped without shortening legacy warrants', () => {
+  let wanted = { 7: 24 };
+
+  wanted = recordSystemWanted(wanted, 7, 12);
+  assert.deepEqual(wanted, { 7: 26 });
+  wanted = recordSystemWanted(wanted, 7, 12);
+  assert.deepEqual(wanted, { 7: 12 + SYSTEM_WANTED_MAX_TURNS });
+  assert.deepEqual(recordSystemWanted(wanted, 7, 12), wanted);
+  assert.deepEqual(recordSystemWanted({ 7: 40 }, 7, 12), { 7: 40 });
+});
+
+test('a crime after warrant expiry starts a fresh base duration', () => {
+  assert.deepEqual(recordSystemWanted({ 7: 12 }, 7, 12), {
+    7: 12 + SYSTEM_WANTED_TURNS,
+  });
 });
 
 test('normalization keeps only serializable system alert entries', () => {

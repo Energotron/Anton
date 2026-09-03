@@ -1,4 +1,6 @@
 export const SYSTEM_WANTED_TURNS = 5;
+export const SYSTEM_WANTED_REPEAT_TURNS = 2;
+export const SYSTEM_WANTED_MAX_TURNS = 15;
 
 function integer(value) {
   const number = Number(value);
@@ -45,6 +47,16 @@ export function recordSystemWanted(wantedBySystem = {}, systemId, currentTurn, d
   if (id === null || id < 0 || turn === null || turn < 1 || turns === null || turns < 1) return normalized;
 
   const key = String(id);
-  normalized[key] = Math.max(normalized[key] || 0, turn + turns);
+  const existingExpiry = normalized[key] || 0;
+  const baseExpiry = turn + turns;
+  if (existingExpiry > turn) {
+    const escalatedExpiry = Math.min(
+      Math.max(existingExpiry, baseExpiry) + SYSTEM_WANTED_REPEAT_TURNS,
+      turn + SYSTEM_WANTED_MAX_TURNS,
+    );
+    normalized[key] = Math.max(existingExpiry, escalatedExpiry);
+  } else {
+    normalized[key] = Math.max(existingExpiry, baseExpiry);
+  }
   return normalized;
 }
