@@ -39,6 +39,11 @@ export function wantedPortAccess(wantedBySystem = {}, systemId, currentTurn) {
   };
 }
 
+export function shouldRecordSystemWanted({ faction = null, alreadyAggressed = false, wantedActive = false } = {}) {
+  if (typeof faction !== 'string' || !faction || faction === 'pir') return false;
+  return !alreadyAggressed || !wantedActive;
+}
+
 export function recordSystemWanted(wantedBySystem = {}, systemId, currentTurn, duration = SYSTEM_WANTED_TURNS) {
   const normalized = normalizeSystemWanted(wantedBySystem);
   const id = integer(systemId);

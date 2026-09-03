@@ -7,6 +7,7 @@ import {
   SYSTEM_WANTED_TURNS,
   normalizeSystemWanted,
   recordSystemWanted,
+  shouldRecordSystemWanted,
   systemWantedStatus,
   wantedPortAccess,
 } from '../src/systemWantedCore.js';
@@ -51,6 +52,29 @@ test('a warrant from another system does not block the current port', () => {
   assert.deepEqual(wantedPortAccess({ 7: 17 }, 8, 12), {
     allowed: true, reason: null, remainingTurns: 0,
   });
+});
+
+test('attacking a remembered victim after paying a fine starts a new warrant', () => {
+  assert.equal(shouldRecordSystemWanted({
+    faction: 'fed', alreadyAggressed: true, wantedActive: false,
+  }), true);
+});
+
+test('repeat hits on the same victim do not escalate an active warrant', () => {
+  assert.equal(shouldRecordSystemWanted({
+    faction: 'fed', alreadyAggressed: true, wantedActive: true,
+  }), false);
+});
+
+test('a new faction victim escalates an active warrant', () => {
+  assert.equal(shouldRecordSystemWanted({
+    faction: 'mal', alreadyAggressed: false, wantedActive: true,
+  }), true);
+});
+
+test('pirate and malformed targets never create an authority warrant', () => {
+  assert.equal(shouldRecordSystemWanted({ faction: 'pir' }), false);
+  assert.equal(shouldRecordSystemWanted({ faction: null }), false);
 });
 
 test('a repeated crime extends but never shortens an existing alert', () => {

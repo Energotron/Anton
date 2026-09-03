@@ -11,7 +11,7 @@ import { applyPlayerHit } from '../src/combatDamageCore.js';
 import { applyAttackReputation } from '../src/combatReputationCore.js';
 import { npcAggressionResponse } from '../src/npcAggressionResponseCore.js';
 import { findDistressResponder } from '../src/npcDistressCallCore.js';
-import { normalizeSystemWanted, recordSystemWanted, systemWantedStatus, wantedPortAccess } from '../src/systemWantedCore.js';
+import { normalizeSystemWanted, recordSystemWanted, shouldRecordSystemWanted, systemWantedStatus, wantedPortAccess } from '../src/systemWantedCore.js';
 
 function showErr(m) {
   try { const b = document.getElementById('errBox'); b.style.display = 'block'; b.textContent = 'Ошибка: ' + m; } catch (e) {}
@@ -662,6 +662,12 @@ function resolvePlayerShot() {
     if (missile) P.missiles--;
     const hit = applyPlayerHit({ hull: tgt.hull, weaponDamage: P.weapon?.dmg, missile });
     tgt.hull = hit.hull;
+    const wantedBeforeHit = systemWantedStatus(G.systemWantedUntil, G.sysId, G.turn).active;
+    const recordsCrime = shouldRecordSystemWanted({
+      faction: tgt.fac,
+      alreadyAggressed: tgt.playerAggressed,
+      wantedActive: wantedBeforeHit,
+    });
     const aggression = applyAttackReputation({
       reputation: P.rep,
       faction: tgt.fac,
@@ -669,9 +675,11 @@ function resolvePlayerShot() {
     });
     P.rep = aggression.reputation;
     let distressResponder = null;
+    if (recordsCrime) {
+      G.systemWantedUntil = recordSystemWanted(G.systemWantedUntil, G.sysId, G.turn);
+    }
     if (aggression.applied) {
       tgt.playerAggressed = true;
-      G.systemWantedUntil = recordSystemWanted(G.systemWantedUntil, G.sysId, G.turn);
       distressResponder = findDistressResponder(tgt, demoShips);
       if (distressResponder) distressResponder.playerAggressed = true;
     }
@@ -680,11 +688,11 @@ function resolvePlayerShot() {
       : '';
     const distressNote = distressResponder ? ` · SOS: патруль #${distressResponder.uid}` : '';
     const wanted = systemWantedStatus(G.systemWantedUntil, G.sysId, G.turn);
-    const wantedNote = aggression.applied && wanted.active ? ` · розыск ${wanted.remainingTurns} ходов` : '';
+    const wantedNote = recordsCrime && wanted.active ? ` · розыск ${wanted.remainingTurns} ходов` : '';
     R.boom(tgt.x, tgt.y, hit.destroyed ? 28 : 13, FACS[tgt.fac]?.c || '#ff7043');
     if (!hit.destroyed) {
       sfx.hit(); G.shake = 3;
-      toast(`🎯 Попадание −${hit.damage} · корпус ${Math.ceil(hit.hull)}${reputationNote}${distressNote}${wantedNote}`, aggression.applied ? 'bad' : '');
+      toast(`🎯 Попадание −${hit.damage} · корпус ${Math.ceil(hit.hull)}${reputationNote}${distressNote}${wantedNote}`, recordsCrime ? 'bad' : '');
       return;
     }
     sfx.boom(); G.shake = 7;
@@ -692,7 +700,7 @@ function resolvePlayerShot() {
     demoShips = demoShips.filter(s => s.uid !== tgt.uid);
     G.targetShip = null;
     P.kills++; P.xp += 18;
-    toast(`☠️ Уничтожен${reputationNote}${distressNote}${wantedNote}`, aggression.applied ? 'bad' : 'good');
+    toast(`☠️ Уничтожен${reputationNote}${distressNote}${wantedNote}`, recordsCrime ? 'bad' : 'good');
     setTimeout(() => {
       if (G.state === 'menu') return;
       const S = systems[G.sysId];
