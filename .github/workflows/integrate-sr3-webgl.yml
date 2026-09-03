@@ -35,7 +35,8 @@ jobs:
             game/webgl/js/assets.js \
             game/webgl/js/data.js \
             game/webgl/js/math.js \
-            game/webgl/manifest.json; do
+            game/webgl/manifest.json \
+            game/webgl/vite.config.js; do
             test -s "$file"
           done
           for track in flight fighter human gaal fei quasar peleng maloc; do
@@ -62,12 +63,39 @@ jobs:
       - name: Build production WebGL bundle
         run: npm run build --prefix game/webgl
 
+      - name: Assemble portable browser build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p game/webgl/dist/music
+          cp -a game/webgl/music/. game/webgl/dist/music/
+
+          test -s game/webgl/dist/index.html
+          test -d game/webgl/dist/assets
+          for track in flight fighter human gaal fei quasar peleng maloc; do
+            test -s "game/webgl/dist/music/${track}.mp3"
+          done
+
+          # Production must be portable under nested paths / GitHub Pages / local static hosting.
+          if grep -Eq '(src|href)="/assets/' game/webgl/dist/index.html; then
+            echo 'Production index contains root-absolute /assets URLs.' >&2
+            exit 1
+          fi
+
+          # Browser build must not depend on unresolved source imports.
+          if grep -RIEq "from ['\"]three['\"]|import[[:space:]]*\(['\"]three['\"]\)" game/webgl/dist/assets; then
+            echo 'Production bundle still contains a bare three import.' >&2
+            exit 1
+          fi
+          if grep -Eq 'src="[^\"]*(js/main|src/)' game/webgl/dist/index.html; then
+            echo 'Production index still points at raw KR3 source modules.' >&2
+            exit 1
+          fi
+
       - name: Upload verified browser build
         uses: actions/upload-artifact@v4
         with:
           name: sr3-webgl-${{ github.sha }}
-          path: |
-            game/webgl/dist
-            game/webgl/music
+          path: game/webgl/dist
           if-no-files-found: error
           retention-days: 7
