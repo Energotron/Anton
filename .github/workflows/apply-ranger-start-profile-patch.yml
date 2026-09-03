@@ -1,0 +1,41 @@
+name: Apply Ranger Start Profile Patch
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/apply-ranger-start-profile-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Apply guarded main.js patch
+        run: python3 scripts/patch_ranger_start_profiles.py
+
+      - name: Sanity checks
+        run: |
+          grep -q "buildRangerStartProfile" game/webgl/js/main.js
+          grep -q "chooseRangerStartSystem" game/webgl/js/main.js
+          grep -q "startProfile.raceName" game/webgl/js/main.js
+          ! grep -q "function startNewGame()" game/webgl/js/main.js
+
+      - name: Commit patched runtime
+        run: |
+          if git diff --quiet -- game/webgl/js/main.js; then
+            echo "No runtime changes required"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/webgl/js/main.js
+          git commit -m "feat: apply race and ranger class starting conditions"
+          git push origin master
