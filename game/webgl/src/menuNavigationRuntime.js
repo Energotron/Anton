@@ -1,0 +1,78 @@
+export function endGameSession(doc = document, win = window) {
+  try { win.close(); } catch (_) {}
+  // Browsers normally refuse window.close() for tabs not opened by script.
+  // Fall back to a deterministic exited state instead of leaving gameplay active.
+  setTimeout(() => {
+    if (!doc || !doc.body) return;
+    doc.body.innerHTML = `
+      <main style="min-height:100vh;display:grid;place-items:center;background:#05070f;color:#f3f6ff;font-family:system-ui,sans-serif;text-align:center;padding:24px">
+        <section>
+          <h1 style="margin:0 0 12px">Космические Рейнджеры 3</h1>
+          <p style="opacity:.75">Игра завершена.</p>
+          <button id="returnToGame" type="button" style="margin-top:12px;padding:12px 18px;cursor:pointer">Вернуться в главное меню</button>
+        </section>
+      </main>`;
+    doc.getElementById('returnToGame')?.addEventListener('click', () => win.location.reload());
+  }, 120);
+}
+
+export function goToMainMenu(win = window) {
+  // Reloading is intentional: it clears transient gameplay overlays, listeners,
+  // camera state and modal traps while preserving local save slots.
+  win.location.reload();
+}
+
+export function bindMenuNavigation(doc = document, win = window) {
+  const newGame = doc.getElementById('btnNewGame');
+  if (newGame && !newGame.dataset.kr3SingleStartBound) {
+    newGame.dataset.kr3SingleStartBound = '1';
+    // main.js historically attached two bubble handlers to this control.
+    // Capture first and stop them so one user action creates exactly one game.
+    newGame.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (typeof win.startNewGame === 'function') win.startNewGame();
+    }, true);
+  }
+
+  const menuButton = doc.getElementById('menuBtn');
+  if (menuButton && !menuButton.dataset.kr3MenuBound) {
+    menuButton.dataset.kr3MenuBound = '1';
+    menuButton.title = 'Главное меню';
+    menuButton.setAttribute('aria-label', 'Открыть меню игры');
+    menuButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const existing = doc.getElementById('kr3PauseMenu');
+      if (existing) { existing.remove(); return; }
+      const overlay = doc.createElement('div');
+      overlay.id = 'kr3PauseMenu';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.72);display:grid;place-items:center;padding:20px';
+      overlay.innerHTML = `
+        <div style="width:min(420px,92vw);background:#101726;border:1px solid #52627d;border-radius:14px;padding:22px;display:grid;gap:12px;box-shadow:0 18px 60px #000">
+          <h2 style="margin:0;color:#fff;text-align:center">МЕНЮ ИГРЫ</h2>
+          <button type="button" id="kr3ResumeBtn" class="mbtn">▶ ПРОДОЛЖИТЬ</button>
+          <button type="button" id="kr3MainMenuBtn" class="mbtn">⌂ ГЛАВНОЕ МЕНЮ</button>
+        </div>`;
+      doc.body.appendChild(overlay);
+      overlay.querySelector('#kr3ResumeBtn')?.addEventListener('click', () => overlay.remove());
+      overlay.querySelector('#kr3MainMenuBtn')?.addEventListener('click', () => goToMainMenu(win));
+      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    }, true);
+  }
+
+  const mainMenu = doc.getElementById('menuInner');
+  if (mainMenu && !doc.getElementById('btnExitGame')) {
+    const exit = doc.createElement('button');
+    exit.className = 'mbtn ghost';
+    exit.id = 'btnExitGame';
+    exit.type = 'button';
+    exit.textContent = '⏻ ВЫХОД ИЗ ИГРЫ';
+    exit.addEventListener('click', () => endGameSession(doc, win));
+    mainMenu.appendChild(exit);
+  }
+}
+
+if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+  bindMenuNavigation(document, window);
+}
