@@ -1,7 +1,7 @@
-import diplomacyRulesData from '../../../data/diplomacy_rules.json' with { type: 'json' };
+import { DIPLOMACY_RULES_DATA } from './diplomacyRulesData.js';
 import { applyDiplomacyAction, normalizeDiplomacyRules } from './diplomacyRulesCore.js';
 
-const DIPLOMACY_RULES = normalizeDiplomacyRules(diplomacyRulesData);
+const DIPLOMACY_RULES = normalizeDiplomacyRules(DIPLOMACY_RULES_DATA);
 export const ATTACK_REPUTATION_DELTA = DIPLOMACY_RULES.actions.attack;
 
 export function applyAttackReputation({
