@@ -11,6 +11,7 @@ import { applyPlayerHit } from '../src/combatDamageCore.js';
 import { applyAttackReputation } from '../src/combatReputationCore.js';
 import { npcAggressionResponse } from '../src/npcAggressionResponseCore.js';
 import { findDistressResponder } from '../src/npcDistressCallCore.js';
+import { normalizeSystemWanted, recordSystemWanted, systemWantedStatus } from '../src/systemWantedCore.js';
 
 function showErr(m) {
   try { const b = document.getElementById('errBox'); b.style.display = 'block'; b.textContent = 'Ошибка: ' + m; } catch (e) {}
@@ -378,7 +379,7 @@ const G = {
   moveTarget: null, targetShip: null, shotMode: 'laser',
   anim: null, visited: new Set([0]),
   warpT: 0, warpTo: 0, warpDone: false, warpFrom: -1,
-  panel: null, offers: [], shopTab: 0, tradeReputationTurns: {},
+  panel: null, offers: [], shopTab: 0, tradeReputationTurns: {}, systemWantedUntil: {},
   // camera: follow player or free pan
   camFollow: true, camX: 0, camY: 0,
   news: []
@@ -670,6 +671,7 @@ function resolvePlayerShot() {
     let distressResponder = null;
     if (aggression.applied) {
       tgt.playerAggressed = true;
+      G.systemWantedUntil = recordSystemWanted(G.systemWantedUntil, G.sysId, G.turn);
       distressResponder = findDistressResponder(tgt, demoShips);
       if (distressResponder) distressResponder.playerAggressed = true;
     }
@@ -677,10 +679,12 @@ function resolvePlayerShot() {
       ? ` · репутация ${aggression.delta > 0 ? '+' : ''}${aggression.delta}`
       : '';
     const distressNote = distressResponder ? ` · SOS: патруль #${distressResponder.uid}` : '';
+    const wanted = systemWantedStatus(G.systemWantedUntil, G.sysId, G.turn);
+    const wantedNote = aggression.applied && wanted.active ? ` · розыск ${wanted.remainingTurns} ходов` : '';
     R.boom(tgt.x, tgt.y, hit.destroyed ? 28 : 13, FACS[tgt.fac]?.c || '#ff7043');
     if (!hit.destroyed) {
       sfx.hit(); G.shake = 3;
-      toast(`🎯 Попадание −${hit.damage} · корпус ${Math.ceil(hit.hull)}${reputationNote}${distressNote}`, aggression.applied ? 'bad' : '');
+      toast(`🎯 Попадание −${hit.damage} · корпус ${Math.ceil(hit.hull)}${reputationNote}${distressNote}${wantedNote}`, aggression.applied ? 'bad' : '');
       return;
     }
     sfx.boom(); G.shake = 7;
@@ -688,7 +692,7 @@ function resolvePlayerShot() {
     demoShips = demoShips.filter(s => s.uid !== tgt.uid);
     G.targetShip = null;
     P.kills++; P.xp += 18;
-    toast(`☠️ Уничтожен${reputationNote}${distressNote}`, aggression.applied ? 'bad' : 'good');
+    toast(`☠️ Уничтожен${reputationNote}${distressNote}${wantedNote}`, aggression.applied ? 'bad' : 'good');
     setTimeout(() => {
       if (G.state === 'menu') return;
       const S = systems[G.sysId];
@@ -1249,7 +1253,9 @@ function setButtons(active) {
 function updHUD() {
   const S = systems[G.sysId] || { name: '—' };
   $('sysName').textContent = '⬢ ' + S.name;
-  $('dayRank').textContent = `${formatDate()} · Ход ${G.turn} · Убито ${P.kills}`;
+  const wanted = systemWantedStatus(G.systemWantedUntil, G.sysId, G.turn);
+  const wantedLabel = wanted.active ? ` · 🚨 Розыск ${wanted.remainingTurns}` : '';
+  $('dayRank').textContent = `${formatDate()} · Ход ${G.turn} · Убито ${P.kills}${wantedLabel}`;
   $('barHull').style.width = Math.max(0, P.hull / P.maxHull * 100) + '%';
   $('barShield').style.width = Math.max(0, P.shield / P.maxShield * 100) + '%';
   $('res').innerHTML = `💰 <b>${fmt(P.money)}</b> ⛽ <b>${Math.round(P.fuel)}</b> 🚀 <b>${P.missiles}</b>`;
@@ -1771,7 +1777,8 @@ function serializeGame() {
       date: Object.assign({}, G.date), sysId: G.sysId,
       visited: Array.from(G.visited || []),
       offers: G.offers || [], news: G.news || [], activeQuest: G.activeQuest || null,
-      tradeReputationTurns: Object.assign({}, G.tradeReputationTurns || {})
+      tradeReputationTurns: Object.assign({}, G.tradeReputationTurns || {}),
+      systemWantedUntil: normalizeSystemWanted(G.systemWantedUntil)
     },
     systems: systems.map(s => ({
       id: s.id, name: s.name, x: s.x, y: s.y, fac: s.fac, danger: s.danger,
@@ -1829,6 +1836,7 @@ function loadGame(slot) {
     G.news = data.G.news || [];
     G.activeQuest = data.G.activeQuest || null;
     G.tradeReputationTurns = Object.assign({}, data.G.tradeReputationTurns || {});
+    G.systemWantedUntil = normalizeSystemWanted(data.G.systemWantedUntil);
     G.moveTarget = null; G.targetShip = null; G.anim = null; G.panel = null;
     G.phase = 'player'; G.state = 'demo';
     G.camFollow = true; G.camX = P.x; G.camY = P.y; G.warpFrom = -1;
@@ -1891,6 +1899,7 @@ function startNewGame() {
     G.offers = [];
     G.activeQuest = null;
     G.tradeReputationTurns = {};
+    G.systemWantedUntil = {};
     P.docked = null;
     P.cargo = {};
     P.lastPort = { sys: 0, pl: 0 };

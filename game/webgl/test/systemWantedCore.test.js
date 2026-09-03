@@ -1,0 +1,47 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { SYSTEM_WANTED_TURNS, normalizeSystemWanted, recordSystemWanted, systemWantedStatus } from '../src/systemWantedCore.js';
+
+test('faction aggression creates a five-turn local wanted status', () => {
+  const wanted = recordSystemWanted({}, 7, 12);
+
+  assert.deepEqual(wanted, { 7: 12 + SYSTEM_WANTED_TURNS });
+  assert.deepEqual(systemWantedStatus(wanted, 7, 12), {
+    active: true, remainingTurns: 5, expiresTurn: 17,
+  });
+});
+
+test('wanted status counts down and expires deterministically', () => {
+  const wanted = { 7: 17 };
+
+  assert.equal(systemWantedStatus(wanted, 7, 16).remainingTurns, 1);
+  assert.deepEqual(systemWantedStatus(wanted, 7, 17), {
+    active: false, remainingTurns: 0, expiresTurn: 17,
+  });
+});
+
+test('wanted status remains isolated to the system where the crime occurred', () => {
+  const wanted = recordSystemWanted({}, 7, 12);
+
+  assert.equal(systemWantedStatus(wanted, 8, 12).active, false);
+});
+
+test('a repeated crime extends but never shortens an existing alert', () => {
+  const existing = { 7: 30 };
+
+  assert.deepEqual(recordSystemWanted(existing, 7, 12), { 7: 30 });
+  assert.deepEqual(recordSystemWanted(existing, 7, 28), { 7: 33 });
+  assert.deepEqual(existing, { 7: 30 });
+});
+
+test('normalization keeps only serializable system alert entries', () => {
+  assert.deepEqual(normalizeSystemWanted({ 2: '9', bad: 12, 3: -1, 4: Infinity }), { 2: 9 });
+  assert.deepEqual(normalizeSystemWanted(null), {});
+});
+
+test('invalid crime context fails safely without inventing an alert', () => {
+  assert.deepEqual(recordSystemWanted({ 2: 9 }, -1, 4), { 2: 9 });
+  assert.deepEqual(recordSystemWanted({ 2: 9 }, 2, 4, 0), { 2: 9 });
+  assert.equal(systemWantedStatus({ 2: 9 }, 2, 'bad').active, false);
+});
