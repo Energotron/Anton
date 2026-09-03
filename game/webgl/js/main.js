@@ -12,6 +12,7 @@ import { applyAttackReputation } from '../src/combatReputationCore.js';
 import { npcAggressionResponse } from '../src/npcAggressionResponseCore.js';
 import { findDistressResponder } from '../src/npcDistressCallCore.js';
 import { normalizeSystemWanted, recordSystemWanted, shouldRecordSystemWanted, systemWantedStatus, wantedPortAccess } from '../src/systemWantedCore.js';
+import { buildRangerStartProfile } from '../src/rangerStartProfiles.js';
 
 function showErr(m) {
   try { const b = document.getElementById('errBox'); b.style.display = 'block'; b.textContent = 'Ошибка: ' + m; } catch (e) {}
@@ -238,7 +239,7 @@ function genGalaxy() {
       id: i,
       name: names[i],
       x, y,
-      fac: pick(['fed', 'fed', 'mal', 'pel', 'kla']),
+      fac: pick(['fed', 'fed', 'mal', 'pel', 'fei', 'gaal', 'kla']),
       danger: 1 + Math.floor(R() * 5),
       starC: pick(['#ffd27a', '#ff9a5c', '#9ecbff', '#fff3c4', '#ff7a6e', '#c0ff90']),
       links: [],
@@ -316,7 +317,8 @@ const P = {
   docked: null,
   lastPort: { sys: 0, pl: 0 },
   cargo: {},
-  rep: { fed: 10, mal: 5, pel: 5, kla: 0, pir: -40 }
+  raceId: 'fed', classId: 'trader',
+  rep: { fed: 10, mal: 5, pel: 5, fei: 5, gaal: 5, kla: -60, pir: -40 }
 };
 function applyEquip() {
   const hp = P.maxHull ? P.hull / P.maxHull : 1;
@@ -1795,6 +1797,7 @@ function serializeGame() {
       hull: P.hull, maxHull: P.maxHull, shield: P.shield, maxShield: P.maxShield,
       shieldReg: P.shieldReg, maxSpeed: P.maxSpeed, cap: P.cap, radar: P.radar,
       eq: Object.assign({}, P.eq), cargo: Object.assign({}, P.cargo), rep: Object.assign({}, P.rep),
+      raceId: P.raceId || 'fed', classId: P.classId || 'trader',
       docked: P.docked, lastPort: Object.assign({}, P.lastPort)
     },
     G: {
@@ -1899,11 +1902,33 @@ function refreshContinueBtn() {
   } catch (e) { btn.style.display = 'none'; }
 }
 
-function startNewGame() {
+function chooseRangerStartSystem(profile) {
+  if (!systems.length) return 0;
+  const raceSystems = systems.filter(s => s.fac === profile.faction);
+  const pool = raceSystems.length ? raceSystems : systems;
+  if (profile.startMode === 'outlaw') {
+    return systems.slice().sort((a, b) => b.danger - a.danger || a.id - b.id)[0]?.id || 0;
+  }
+  if (profile.startMode === 'danger') {
+    return pool.slice().sort((a, b) => b.danger - a.danger || a.id - b.id)[0]?.id || 0;
+  }
+  if (profile.startMode === 'border') {
+    return pool.slice().sort((a, b) => {
+      const borderA = (a.links || []).filter(id => systems[id] && systems[id].fac !== profile.faction).length;
+      const borderB = (b.links || []).filter(id => systems[id] && systems[id].fac !== profile.faction).length;
+      return borderB - borderA || b.danger - a.danger || a.id - b.id;
+    })[0]?.id || 0;
+  }
+  return pool.slice().sort((a, b) => a.danger - b.danger || a.id - b.id)[0]?.id || 0;
+}
+
+function startNewGame(profileSelection = {}) {
   try {
     initAudio();
     sfx.ui();
     genGalaxy();
+    const startProfile = buildRangerStartProfile(profileSelection);
+    const startSystemId = chooseRangerStartSystem(startProfile);
     for (const k of Object.keys(systemShips)) delete systemShips[k];
     demoShips = [];
     uidCounter = 1000;
@@ -1914,8 +1939,8 @@ function startNewGame() {
     resetDate(); // 01.01.3500
     G.news = [];
     G.camFollow = true;
-    G.sysId = 0;
-    G.visited = new Set([0]);
+    G.sysId = startSystemId;
+    G.visited = new Set([startSystemId]);
     G.moveTarget = null;
     G.targetShip = null;
     G.shotMode = 'laser';
@@ -1926,16 +1951,20 @@ function startNewGame() {
     G.tradeReputationTurns = {};
     G.systemWantedUntil = {};
     P.docked = null;
-    P.cargo = {};
-    P.lastPort = { sys: 0, pl: 0 };
-    P.eq = { w: 1, e: 1, s: 1, h: 0, c: 1, r: 1 };
+    P.raceId = startProfile.raceId;
+    P.classId = startProfile.classId;
+    P.rep = Object.assign({}, startProfile.reputation);
+    P.cargo = Object.assign({}, startProfile.cargo);
+    P.lastPort = { sys: startSystemId, pl: 0 };
+    P.eq = Object.assign({}, startProfile.eq);
     applyEquip();
     P.hull = P.maxHull;
     P.shield = P.maxShield;
     P.fuel = P.maxFuel;
     P.kills = 0;
-    P.missiles = 8;
-    P.money = 8000;
+    P.xp = 0;
+    P.missiles = startProfile.missiles;
+    P.money = startProfile.money;
     const menu = $('menu');
     if (menu) menu.classList.add('hidden');
     const panel = $('panel');
@@ -1944,9 +1973,9 @@ function startNewGame() {
       panel.innerHTML = '';
     }
     showHud(true);
-    enterSystem(0);
+    enterSystem(startSystemId);
     startMusic();
-    toast('🚀 70 систем · гиперпрыжки · посадка на планеты · M — карта', 'good');
+    toast(`🚀 ${startProfile.raceName} · ${startProfile.className} · ${systems[startSystemId]?.name || 'стартовая система'}`, 'good');
   } catch (err) {
     console.error('NewGame error:', err);
     showErr((err && err.message) ? err.message : String(err));
