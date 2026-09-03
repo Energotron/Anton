@@ -5,6 +5,11 @@ function finiteNonNegative(value, fallback = 0) {
   return Number.isFinite(number) ? Math.max(0, number) : fallback;
 }
 
+export function consumeMissileAmmo(ammo = 0, missileFired = false) {
+  const available = Math.trunc(finiteNonNegative(ammo));
+  return missileFired && available > 0 ? available - 1 : available;
+}
+
 export function applyPlayerHit({ hull = 0, weaponDamage = 0, missile = false } = {}) {
   const previousHull = finiteNonNegative(hull);
   const configuredDamage = finiteNonNegative(weaponDamage);

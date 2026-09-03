@@ -1,7 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { MISSILE_DAMAGE, applyPlayerHit } from '../src/combatDamageCore.js';
+import { MISSILE_DAMAGE, applyPlayerHit, consumeMissileAmmo } from '../src/combatDamageCore.js';
+
+test('missile ammo is consumed when a missile is fired even if the shot later misses', () => {
+  assert.equal(consumeMissileAmmo(8, true), 7);
+});
+
+test('laser fire does not consume missile ammo', () => {
+  assert.equal(consumeMissileAmmo(8, false), 8);
+});
+
+test('missile ammo consumption is bounded and sanitizes malformed saves', () => {
+  assert.equal(consumeMissileAmmo(0, true), 0);
+  assert.equal(consumeMissileAmmo(-4, true), 0);
+  assert.equal(consumeMissileAmmo('bad', true), 0);
+});
 
 test('laser damage reduces hull without destroying a healthy target', () => {
   assert.deepEqual(applyPlayerHit({ hull: 35, weaponDamage: 5 }), {

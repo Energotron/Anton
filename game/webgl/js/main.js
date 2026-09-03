@@ -7,7 +7,7 @@ import { FACS, WEAPONS, ENGINES, SHIELDS, HULLS, CARGOS, RADARS, SHOPCATS, RANKS
 import { SYSNAMES_EXT } from './assets.js';
 import { WebGLRenderer } from './WebGLRenderer.js';
 import { applyTradeReputation } from '../src/tradeReputationCore.js';
-import { applyPlayerHit } from '../src/combatDamageCore.js';
+import { applyPlayerHit, consumeMissileAmmo } from '../src/combatDamageCore.js';
 import { applyAttackReputation } from '../src/combatReputationCore.js';
 import { npcAggressionResponse } from '../src/npcAggressionResponseCore.js';
 import { findDistressResponder } from '../src/npcDistressCallCore.js';
@@ -658,8 +658,8 @@ function resolvePlayerShot() {
   G.shotMode = 'laser';
   R.shot(P.x, P.y, tgt.x, tgt.y, missile ? '#ffb347' : (P.weapon.c || '#7dd8ff'));
   sfx.shoot();
+  P.missiles = consumeMissileAmmo(P.missiles, missile);
   if (Math.random() < 0.9) {
-    if (missile) P.missiles--;
     const hit = applyPlayerHit({ hull: tgt.hull, weaponDamage: P.weapon?.dmg, missile });
     tgt.hull = hit.hull;
     const wantedBeforeHit = systemWantedStatus(G.systemWantedUntil, G.sysId, G.turn).active;
