@@ -28,6 +28,15 @@ export function systemWantedStatus(wantedBySystem = {}, systemId, currentTurn) {
   return { active: remainingTurns > 0, remainingTurns, expiresTurn };
 }
 
+export function wantedPortAccess(wantedBySystem = {}, systemId, currentTurn) {
+  const wanted = systemWantedStatus(wantedBySystem, systemId, currentTurn);
+  return {
+    allowed: !wanted.active,
+    reason: wanted.active ? 'wanted' : null,
+    remainingTurns: wanted.remainingTurns,
+  };
+}
+
 export function recordSystemWanted(wantedBySystem = {}, systemId, currentTurn, duration = SYSTEM_WANTED_TURNS) {
   const normalized = normalizeSystemWanted(wantedBySystem);
   const id = integer(systemId);

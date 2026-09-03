@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { SYSTEM_WANTED_TURNS, normalizeSystemWanted, recordSystemWanted, systemWantedStatus } from '../src/systemWantedCore.js';
+import { SYSTEM_WANTED_TURNS, normalizeSystemWanted, recordSystemWanted, systemWantedStatus, wantedPortAccess } from '../src/systemWantedCore.js';
 
 test('faction aggression creates a five-turn local wanted status', () => {
   const wanted = recordSystemWanted({}, 7, 12);
@@ -25,6 +25,24 @@ test('wanted status remains isolated to the system where the crime occurred', ()
   const wanted = recordSystemWanted({}, 7, 12);
 
   assert.equal(systemWantedStatus(wanted, 8, 12).active, false);
+});
+
+test('active local wanted status blocks authority port access', () => {
+  assert.deepEqual(wantedPortAccess({ 7: 17 }, 7, 12), {
+    allowed: false, reason: 'wanted', remainingTurns: 5,
+  });
+});
+
+test('port access returns when the local wanted status expires', () => {
+  assert.deepEqual(wantedPortAccess({ 7: 17 }, 7, 17), {
+    allowed: true, reason: null, remainingTurns: 0,
+  });
+});
+
+test('a warrant from another system does not block the current port', () => {
+  assert.deepEqual(wantedPortAccess({ 7: 17 }, 8, 12), {
+    allowed: true, reason: null, remainingTurns: 0,
+  });
 });
 
 test('a repeated crime extends but never shortens an existing alert', () => {

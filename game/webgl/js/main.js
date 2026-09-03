@@ -11,7 +11,7 @@ import { applyPlayerHit } from '../src/combatDamageCore.js';
 import { applyAttackReputation } from '../src/combatReputationCore.js';
 import { npcAggressionResponse } from '../src/npcAggressionResponseCore.js';
 import { findDistressResponder } from '../src/npcDistressCallCore.js';
-import { normalizeSystemWanted, recordSystemWanted, systemWantedStatus } from '../src/systemWantedCore.js';
+import { normalizeSystemWanted, recordSystemWanted, systemWantedStatus, wantedPortAccess } from '../src/systemWantedCore.js';
 
 function showErr(m) {
   try { const b = document.getElementById('errBox'); b.style.display = 'block'; b.textContent = 'Ошибка: ' + m; } catch (e) {}
@@ -1338,6 +1338,12 @@ function dockPlanet(idx) {
   const S = systems[G.sysId];
   if (!S || !S.planets[idx] || !S.planets[idx].hasPort) return;
   if (P.docked !== null) return;
+  const portAccess = wantedPortAccess(G.systemWantedUntil, G.sysId, G.turn);
+  if (!portAccess.allowed) {
+    toast(`🚨 Посадка запрещена: розыск ещё ${portAccess.remainingTurns} ходов`, 'bad');
+    sfx.ui();
+    return;
+  }
   P.docked = idx;
   P.lastPort = { sys: G.sysId, pl: idx };
   rollPrices(S.planets[idx]);
@@ -1411,6 +1417,16 @@ function renderDockPanel() {
     return;
   }
   const S = systems[G.sysId];
+  const portAccess = wantedPortAccess(G.systemWantedUntil, G.sysId, G.turn);
+  if (!portAccess.allowed) {
+    $('panel').innerHTML = `<div class="pbox">
+      <h2>🚨 Доступ к порту закрыт</h2>
+      <div class="evTxt">Власти системы опознали корабль. Обслуживание приостановлено ещё на ${portAccess.remainingTurns} ходов.</div>
+      <div class="prow"><button class="btn red" id="dockLeave">🚀 Покинуть порт</button></div>
+    </div>`;
+    $('dockLeave').onclick = (ev) => undock(ev);
+    return;
+  }
   const repCost = Math.ceil((P.maxHull - P.hull) * 1.6);
   const fuelCost = Math.ceil((P.maxFuel - P.fuel) * 1.8);
   const econN = (ECON[pl.econ] && ECON[pl.econ].n) || pl.econ;
