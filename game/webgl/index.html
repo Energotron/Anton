@@ -11,6 +11,8 @@
 <link href="https://cdn.jsdelivr.net/npm/@fontsource/exo-2@5.0.43/400.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/@fontsource/exo-2@5.0.43/700.css" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<!-- Older Android/WebView builds may support ES modules but ignore native import maps. -->
+<script async src="https://ga.jspm.io/npm:es-module-shims@2.8.4/dist/es-module-shims.js"></script>
 </head>
 <body>
   <div id="app">
@@ -57,7 +59,7 @@
     <div id="rotHint" class="hidden">🔄 Переверните телефон горизонтально</div>
   </div>
 
-  <!-- Three.js через importmap (CDN) -->
+  <!-- Three.js через importmap; es-module-shims above provides Android/WebView fallback. -->
   <script type="importmap">
   {
     "imports": {
