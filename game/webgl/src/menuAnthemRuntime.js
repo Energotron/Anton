@@ -1,6 +1,7 @@
 const VIDEO_ID = 'qcmwEXSbQ_U';
 const LOCAL_SOURCE = 'music/menu-anthem.mp3';
 const PLAYER_ORIGIN = typeof location !== 'undefined' ? location.origin : '';
+const AUTOPLAY_DELAY_MS = 80;
 
 let localAudio = null;
 let youtubeFrame = null;
@@ -9,6 +10,8 @@ let playing = false;
 let loading = false;
 let localProbe = null;
 let localAvailable = null;
+let autoplayAttempted = false;
+let autoplayTimer = null;
 
 function menuVisible(doc = document) {
   const menu = doc.getElementById('menu');
@@ -26,7 +29,6 @@ function sendYoutubeCommand(command) {
 
 function getUi(doc = document) {
   return {
-    panel: doc.getElementById('kr3AnthemPanel'),
     button: doc.getElementById('btnMenuAnthem'),
     status: doc.getElementById('kr3AnthemStatus'),
     frameWrap: doc.getElementById('kr3AnthemFrameWrap')
@@ -45,14 +47,14 @@ function syncUi(doc = document, message = '') {
   if (status) {
     status.textContent = message || (
       playing
-        ? (mode === 'local' ? 'Локальный гимн играет · 4:14' : 'Гимн играет через YouTube · 4:14')
+        ? (mode === 'local'
+            ? 'Автовоспроизведение · локальный гимн · 4:14'
+            : 'Автовоспроизведение · гимн КР3 · 4:14')
         : 'Главная тема Космических Рейнджеров 3'
     );
   }
 
-  if (frameWrap) {
-    frameWrap.hidden = mode !== 'youtube' || !youtubeFrame;
-  }
+  if (frameWrap) frameWrap.hidden = mode !== 'youtube' || !youtubeFrame;
 }
 
 function hasLocalAnthem() {
@@ -72,12 +74,15 @@ function hasLocalAnthem() {
 
 function ensureLocalAudio(doc = document) {
   if (localAudio) return localAudio;
+
   const audio = doc.createElement('audio');
   audio.src = LOCAL_SOURCE;
   audio.loop = true;
+  audio.autoplay = true;
   audio.preload = 'auto';
   audio.volume = 0.42;
   audio.setAttribute('playsinline', '');
+
   audio.addEventListener('play', () => {
     playing = true;
     mode = 'local';
@@ -93,15 +98,23 @@ function ensureLocalAudio(doc = document) {
     if (mode === 'local') {
       mode = null;
       playing = false;
-      syncUi(doc, 'Локальный файл недоступен — включите гимн ещё раз');
+      syncUi(doc, 'Локальный файл недоступен — используется сетевой гимн');
     }
   });
+
   localAudio = audio;
   return audio;
 }
 
 function ensureYoutubePlayer(doc = document) {
-  if (youtubeFrame) return youtubeFrame;
+  if (youtubeFrame) {
+    sendYoutubeCommand('playVideo');
+    playing = true;
+    mode = 'youtube';
+    syncUi(doc);
+    return youtubeFrame;
+  }
+
   const { frameWrap } = getUi(doc);
   if (!frameWrap) return null;
 
@@ -113,53 +126,65 @@ function ensureYoutubePlayer(doc = document) {
   frame.loading = 'eager';
   frame.src = `https://www.youtube-nocookie.com/embed/${VIDEO_ID}?autoplay=1&loop=1&playlist=${VIDEO_ID}&playsinline=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(PLAYER_ORIGIN)}`;
   frame.style.cssText = 'width:min(360px,82vw);aspect-ratio:16/9;border:1px solid rgba(255,215,122,.45);border-radius:10px;display:block;margin:8px auto 0;background:#000;box-shadow:0 10px 28px rgba(0,0,0,.45)';
+
+  frame.addEventListener('load', () => {
+    if (!menuVisible(doc)) return;
+    sendYoutubeCommand('playVideo');
+    setTimeout(() => sendYoutubeCommand('playVideo'), 350);
+  });
+
   frameWrap.replaceChildren(frame);
   frameWrap.hidden = false;
   youtubeFrame = frame;
   mode = 'youtube';
   playing = true;
+  syncUi(doc, '🚀 Автовоспроизведение гимна главного меню');
   return frame;
 }
 
-async function playAnthem(doc = document) {
+async function playAnthem(doc = document, options = {}) {
   if (loading || !menuVisible(doc)) return;
 
-  // If the local file was positively detected during preload, use it.
-  if (localAvailable === true) {
-    loading = true;
-    syncUi(doc, 'Подключаю локальную главную тему…');
-    try {
+  const autoplay = options.autoplay === true;
+  loading = true;
+  syncUi(doc, autoplay ? '🚀 Запуск гимна главного меню…' : 'Подключаю главную тему…');
+
+  try {
+    if (localAvailable === null) {
+      if (autoplay) {
+        const probeResult = await Promise.race([
+          hasLocalAnthem(),
+          new Promise(resolve => setTimeout(() => resolve(false), 180))
+        ]);
+        if (probeResult === true) localAvailable = true;
+      } else {
+        await hasLocalAnthem();
+      }
+    }
+
+    if (localAvailable === true) {
       mode = 'local';
       if (youtubeFrame) {
         sendYoutubeCommand('stopVideo');
         youtubeFrame.remove();
         youtubeFrame = null;
       }
-      await ensureLocalAudio(doc).play();
-      playing = true;
-    } catch (error) {
-      localAvailable = false;
-      playing = false;
-      mode = null;
-      console.warn('KR3 local menu anthem:', error);
-    } finally {
-      loading = false;
-      syncUi(doc);
-    }
-    return;
-  }
 
-  // Create the YouTube player synchronously inside the click gesture so mobile
-  // browsers allow autoplay. A background probe keeps local-file support ready.
-  if (localAvailable === null) hasLocalAnthem().catch(() => false);
-  mode = 'youtube';
-  if (youtubeFrame) {
-    sendYoutubeCommand('playVideo');
-    playing = true;
-  } else {
+      try {
+        await ensureLocalAudio(doc).play();
+        playing = true;
+        return;
+      } catch (error) {
+        localAvailable = false;
+        console.warn('KR3 local menu anthem autoplay:', error);
+      }
+    }
+
     ensureYoutubePlayer(doc);
+  } finally {
+    loading = false;
+    syncUi(doc);
   }
-  syncUi(doc);
 }
 
 function pauseAnthem(doc = document) {
@@ -170,6 +195,11 @@ function pauseAnthem(doc = document) {
 }
 
 function stopAnthem(doc = document) {
+  if (autoplayTimer) {
+    clearTimeout(autoplayTimer);
+    autoplayTimer = null;
+  }
+
   if (localAudio) {
     localAudio.pause();
     localAudio.currentTime = 0;
@@ -179,6 +209,7 @@ function stopAnthem(doc = document) {
     youtubeFrame.remove();
     youtubeFrame = null;
   }
+
   playing = false;
   mode = null;
   syncUi(doc);
@@ -187,6 +218,20 @@ function stopAnthem(doc = document) {
 async function toggleAnthem(doc = document) {
   if (playing) pauseAnthem(doc);
   else await playAnthem(doc);
+}
+
+function scheduleAutoplay(doc = document, win = window) {
+  if (autoplayAttempted || !menuVisible(doc)) return;
+  autoplayAttempted = true;
+  if (autoplayTimer) win.clearTimeout(autoplayTimer);
+  autoplayTimer = win.setTimeout(() => {
+    autoplayTimer = null;
+    playAnthem(doc, { autoplay: true }).catch(error => {
+      console.warn('KR3 menu anthem autoplay:', error);
+      playing = false;
+      syncUi(doc, 'Нажмите, чтобы включить гимн КР3');
+    });
+  }, AUTOPLAY_DELAY_MS);
 }
 
 function mountAnthemUi(doc = document) {
@@ -199,7 +244,7 @@ function mountAnthemUi(doc = document) {
   panel.style.cssText = 'display:grid;justify-items:center;gap:4px;margin-top:8px';
   panel.innerHTML = `
     <button class="mbtn ghost" id="btnMenuAnthem" type="button">▶ ГИМН КР3 — ЗА КРАЕМ ОРБИТ</button>
-    <div id="kr3AnthemStatus" style="font-size:11px;letter-spacing:.08em;color:#ffd77a;opacity:.84;text-align:center">Главная тема Космических Рейнджеров 3</div>
+    <div id="kr3AnthemStatus" style="font-size:11px;letter-spacing:.08em;color:#ffd77a;opacity:.84;text-align:center">Автовоспроизведение главной темы</div>
     <div id="kr3AnthemFrameWrap" hidden></div>`;
 
   const version = menuInner.querySelector('.ver');
@@ -215,6 +260,25 @@ function mountAnthemUi(doc = document) {
   syncUi(doc);
 }
 
+function bindGestureRecovery(doc = document) {
+  const recover = event => {
+    if (!menuVisible(doc)) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('#btnMenuAnthem, #kr3SetupLaunch, #contBtn')) return;
+
+    if (mode === 'youtube' && youtubeFrame) {
+      sendYoutubeCommand('playVideo');
+      playing = true;
+      syncUi(doc);
+    } else if (!playing) {
+      playAnthem(doc).catch(() => {});
+    }
+  };
+
+  doc.addEventListener('pointerdown', recover, { capture: true });
+  doc.addEventListener('keydown', recover, { capture: true });
+}
+
 export function bindMenuAnthem(doc = document, win = window) {
   mountAnthemUi(doc);
 
@@ -226,25 +290,38 @@ export function bindMenuAnthem(doc = document, win = window) {
   const menu = doc.getElementById('menu');
   if (menu) {
     new MutationObserver(() => {
-      if (!menuVisible(doc)) stopAnthem(doc);
+      if (!menuVisible(doc)) {
+        stopAnthem(doc);
+        autoplayAttempted = false;
+      } else {
+        scheduleAutoplay(doc, win);
+      }
     }).observe(menu, { attributes: true, attributeFilter: ['class'] });
   }
 
   doc.addEventListener('visibilitychange', () => {
     if (doc.hidden && playing) pauseAnthem(doc);
+    else if (!doc.hidden && menuVisible(doc) && !playing) {
+      autoplayAttempted = false;
+      scheduleAutoplay(doc, win);
+    }
   });
 
   win.addEventListener('pagehide', () => stopAnthem(doc));
+  bindGestureRecovery(doc);
 
-  const preload = () => { hasLocalAnthem().catch(() => false); };
-  if ('requestIdleCallback' in win) win.requestIdleCallback(preload, { timeout: 1200 });
-  else win.setTimeout(preload, 250);
+  hasLocalAnthem().catch(() => false);
+  scheduleAutoplay(doc, win);
 
   win.KR3MenuAnthem = Object.freeze({
     play: () => playAnthem(doc),
     pause: () => pauseAnthem(doc),
     stop: () => stopAnthem(doc),
-    toggle: () => toggleAnthem(doc)
+    toggle: () => toggleAnthem(doc),
+    autoplay: () => {
+      autoplayAttempted = false;
+      scheduleAutoplay(doc, win);
+    }
   });
 }
 
