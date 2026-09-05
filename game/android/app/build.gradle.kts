@@ -24,3 +24,7 @@ android {
         resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*")
     }
 }
+
+dependencies {
+    implementation("androidx.webkit:webkit:1.12.1")
+}
