@@ -19,6 +19,7 @@
 <link href="https://cdn.jsdelivr.net/npm/@fontsource/exo-2@5.0.43/400.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/@fontsource/exo-2@5.0.43/700.css" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/hotfix-v0.4.1.css">
 <!-- Load the import-map polyfill synchronously. On affected Android/WebView builds,
      an async shim can lose the race to the module graph and main.js never executes. -->
 <script src="https://ga.jspm.io/npm:es-module-shims@2.8.4/dist/es-module-shims.js"></script>
@@ -69,12 +70,13 @@
     <div id="menu">
       <div id="menuBg"></div>
       <div id="menuInner">
+        <img id="kr3MenuLogo" src="assets/icons/kr3-icon.svg" alt="Космические Рейнджеры 3: Дети Эльтана" draggable="false">
         <h1>КОСМИЧЕСКИЕ<br>РЕЙНДЖЕРЫ 3</h1>
         <div class="sub">WebGL · pseudo-3D · свободный полёт<br>станции · астероиды · шлейфы · корабли</div>
         <button class="mbtn" id="btnNewGame" type="button">▶ НОВАЯ ИГРА</button>
         <button class="mbtn" id="contBtn" style="display:none">💾 ПРОДОЛЖИТЬ</button>
         <button class="mbtn ghost" id="btnHelp">🎮 КАК ИГРАТЬ</button>
-        <div class="ver">v3.9 · камера · 5 слотов сейвов · инфоцентр · спавн с планет</div>
+        <div class="ver">v0.4.1 Alpha · Дети Эльтана · Android + WebGL</div>
       </div>
     </div>
     <div id="rotHint" class="hidden">🔄 Переверните телефон горизонтально</div>
@@ -101,8 +103,6 @@
   <script type="module" src="src/pirateBountyRuntime.js"></script>
   <!-- Точка входа — отдельный JS-файл -->
   <script type="module" src="js/main.js"></script>
-  <script type="module" src="src/menuAnthemRuntime.js"></script>
-  <script type="module" src="src/gameMusicRuntime.js"></script>
   <script type="module" src="src/menuNavigationRuntime.js"></script>
   <script type="module" src="src/cameraTouchRuntime.js"></script>
   <script type="module" src="src/cameraBoundsRuntime.js"></script>
