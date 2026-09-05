@@ -78,20 +78,45 @@ jobs:
           path.write_text(css, encoding='utf-8')
           PY
 
-      - name: Try to cache full MP3 anthem
+      - name: Recover anthem from KR3 v0.4.1 release
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          target='game/webgl/music/menu-anthem.mp3'
+          mkdir -p game/webgl/music /tmp/kr3-release
+          gh release download v0.4.1-alpha \
+            --pattern 'Space-Rangers-3-Children-of-Eltan-WebGL-v0.4.1-alpha.zip' \
+            --dir /tmp/kr3-release
+          zipfile='/tmp/kr3-release/Space-Rangers-3-Children-of-Eltan-WebGL-v0.4.1-alpha.zip'
+          unzip -p "$zipfile" music/menu-anthem.ogg > /tmp/kr3-release/menu-anthem.ogg
+          test -s /tmp/kr3-release/menu-anthem.ogg
+          ogg_duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 /tmp/kr3-release/menu-anthem.ogg)"
+          echo "Release anthem duration: ${ogg_duration}s"
+          awk -v d="$ogg_duration" 'BEGIN { exit !(d >= 245.0 && d <= 265.0) }'
+          ffmpeg -y -hide_banner -loglevel error \
+            -i /tmp/kr3-release/menu-anthem.ogg \
+            -codec:a libmp3lame -q:a 4 "$target"
+          mp3_duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$target")"
+          awk -v d="$mp3_duration" 'BEGIN { exit !(d >= 245.0 && d <= 265.0) }'
+          echo "Recovered local MP3 anthem: ${mp3_duration}s, $(stat -c%s "$target") bytes"
+
+      - name: Try external anthem source only if still missing
         continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --upgrade 'yt-dlp[default,curl-cffi]'
           target='game/webgl/music/menu-anthem.mp3'
           if test -s "$target"; then
             duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$target" || true)"
             if test -n "$duration" && awk -v d="$duration" 'BEGIN { exit !(d >= 245.0 && d <= 265.0) }'; then
-              echo "Reusing verified repository MP3 (${duration}s)."
+              echo "Using verified local MP3 (${duration}s)."
               exit 0
             fi
           fi
+          python -m pip install --upgrade 'yt-dlp[default,curl-cffi]'
           bash .github/scripts/fetch-menu-mp3.sh "$target"
 
       - name: Integrate single anthem runtime
@@ -116,12 +141,10 @@ jobs:
           grep -q "const LOCAL_SOURCE = 'music/menu-anthem.mp3';" game/webgl/src/menuAnthemRuntime.js
           grep -q "const VIDEO_ID = 'qcmwEXSbQ_U';" game/webgl/src/menuAnthemRuntime.js
           grep -q 'audio.loop = true;' game/webgl/src/menuAnthemRuntime.js
-          if test -s game/webgl/music/menu-anthem.mp3; then
-            duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 game/webgl/music/menu-anthem.mp3)"
-            awk -v d="$duration" 'BEGIN { exit !(d >= 245.0 && d <= 265.0) }'
-          else
-            echo 'Local MP3 cache unavailable on runner; runtime will use the configured YouTube anthem fallback.'
-          fi
+          test -s game/webgl/music/menu-anthem.mp3
+          duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 game/webgl/music/menu-anthem.mp3)"
+          awk -v d="$duration" 'BEGIN { exit !(d >= 245.0 && d <= 265.0) }'
+          echo "Verified local menu MP3: ${duration}s"
           cd game/webgl
           npm install --no-audit --no-fund
           npm test
@@ -141,7 +164,7 @@ jobs:
             echo 'KR3 main menu hotfix is already integrated.'
             exit 0
           fi
-          git commit -m 'fix(menu): add Children of Eltan background and anthem autoplay'
+          git commit -m 'fix(menu): embed local Children of Eltan anthem MP3'
           git reset --hard HEAD
           for attempt in 1 2 3; do
             if git pull --rebase origin master && git push origin HEAD:master; then
