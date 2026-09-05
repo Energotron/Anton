@@ -1,4 +1,4 @@
-name: Integrate KR3 MP3 Menu Player
+name: Integrate KR3 Main Menu Background + MP3
 
 on:
   workflow_dispatch:
@@ -8,12 +8,13 @@ on:
       - '.github/workflows/import-menu-anthem.yml'
       - '.github/scripts/fetch-menu-mp3.sh'
       - '.github/scripts/integrate-menu-mp3.py'
+      - '.github/menu-bg-final/**'
 
 permissions:
   contents: write
 
 concurrency:
-  group: kr3-menu-mp3-integration
+  group: kr3-main-menu-integration
   cancel-in-progress: true
 
 jobs:
@@ -37,10 +38,45 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Decode local KR3 menu background
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p game/webgl/assets
+          cat .github/menu-bg-final/part*.b64 | base64 --decode > game/webgl/assets/kr3-main-menu.webp
+          test -s game/webgl/assets/kr3-main-menu.webp
+          codec="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=nw=1:nk=1 game/webgl/assets/kr3-main-menu.webp)"
+          dims="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 game/webgl/assets/kr3-main-menu.webp)"
+          test "$codec" = 'webp'
+          test "$dims" = '720x405'
+          echo "Verified menu background: ${dims}, $(stat -c%s game/webgl/assets/kr3-main-menu.webp) bytes"
+
+      - name: Wire local background into main menu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('game/webgl/css/hotfix-v0.4.1.css')
+          css = path.read_text(encoding='utf-8')
+          block = """#menuBg{
+            background:
+              linear-gradient(180deg,rgba(4,6,13,.12) 0%,rgba(4,6,13,.38) 58%,rgba(4,6,13,.78) 100%),
+              url('../assets/kr3-main-menu.webp') center/cover no-repeat !important;
+          }"""
+          css, count = re.subn(r'#menuBg\{.*?\n\}', block, css, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit('menuBg hotfix block not found')
+          path.write_text(css, encoding='utf-8')
+          PY
+          grep -Fq "url('../assets/kr3-main-menu.webp')" game/webgl/css/hotfix-v0.4.1.css
+
       - name: Install modern audio downloader
         run: python -m pip install --upgrade 'yt-dlp[default,curl-cffi]'
 
-      - name: Build verified compressed MP3
+      - name: Build verified full MP3 anthem
         shell: bash
         run: |
           set -euo pipefail
@@ -49,24 +85,28 @@ jobs:
             duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$target" || true)"
             if test -n "$duration" && awk -v d="$duration" 'BEGIN { exit !(d >= 245.0 && d <= 265.0) }'; then
               echo "Reusing verified repository MP3 (${duration}s)."
-              exit 0
+            else
+              bash .github/scripts/fetch-menu-mp3.sh "$target"
             fi
+          else
+            bash .github/scripts/fetch-menu-mp3.sh "$target"
           fi
-          bash .github/scripts/fetch-menu-mp3.sh "$target"
 
-      - name: Integrate one menu audio runtime
+      - name: Integrate one looping menu audio runtime
         run: |
           python .github/scripts/integrate-menu-mp3.py
           rm -f game/webgl/music/menu-anthem.ogg
           rm -f game/webgl/src/menuAudioPlaceholderRuntime.js
 
-      - name: Verify integration and WebGL build
+      - name: Verify menu integration and WebGL build
         shell: bash
         run: |
           set -euo pipefail
+          test -s game/webgl/assets/kr3-main-menu.webp
           test -s game/webgl/music/menu-anthem.mp3
           test ! -e game/webgl/music/menu-anthem.ogg
           test ! -e game/webgl/src/menuAudioPlaceholderRuntime.js
+          grep -Fq "url('../assets/kr3-main-menu.webp')" game/webgl/css/hotfix-v0.4.1.css
           grep -q "const MENU_ANTHEM = 'music/menu-anthem.mp3';" game/webgl/js/main.js
           grep -Fq 'window.KR3MenuAnthem?.autoplay?.()' game/webgl/js/main.js
           grep -q 'src="src/menuAnthemRuntime.js"' game/webgl/index.html
@@ -80,23 +120,26 @@ jobs:
           npm install --no-audit --no-fund
           npm test
           npm run build
-          mkdir -p dist/music
-          cp music/menu-anthem.mp3 dist/music/menu-anthem.mp3
-          test -s dist/music/menu-anthem.mp3
+          test -d dist
 
-      - name: Commit MP3 player to master
+      - name: Commit main menu hotfix to master
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add game/webgl/index.html game/webgl/js/main.js game/webgl/music/menu-anthem.mp3
-          git rm -f --ignore-unmatch game/webgl/music/menu-anthem.ogg game/webgl/src/menuAudioPlaceholderRuntime.js
+          rm -rf .github/menu-bg-chunks
+          git add game/webgl/assets/kr3-main-menu.webp \
+                  game/webgl/css/hotfix-v0.4.1.css \
+                  game/webgl/index.html \
+                  game/webgl/js/main.js \
+                  game/webgl/music/menu-anthem.mp3
+          git add -A .github/menu-bg-chunks game/webgl/music/menu-anthem.ogg game/webgl/src/menuAudioPlaceholderRuntime.js || true
           if git diff --cached --quiet; then
-            echo 'MP3 menu player is already integrated.'
+            echo 'KR3 main menu background and MP3 are already integrated.'
             exit 0
           fi
-          git commit -m 'feat(webgl): add looping MP3 anthem to main menu'
+          git commit -m 'fix(menu): add Children of Eltan background and looping MP3 anthem'
           for attempt in 1 2 3; do
             git pull --rebase origin master
             if git push origin HEAD:master; then
