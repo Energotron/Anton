@@ -134,25 +134,20 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          rm -rf .github/menu-bg-chunks
-          git add game/webgl/assets/kr3-main-menu.webp \
-                  game/webgl/css/hotfix-v0.4.1.css \
-                  game/webgl/index.html \
-                  game/webgl/js/main.js
-          if test -s game/webgl/music/menu-anthem.mp3; then
-            git add game/webgl/music/menu-anthem.mp3
-          fi
-          git add -A .github/menu-bg-chunks game/webgl/music/menu-anthem.ogg game/webgl/src/menuAudioPlaceholderRuntime.js || true
+          rm -rf .github/menu-bg-chunks game/webgl/node_modules game/webgl/dist
+          git restore -- game/webgl/package-lock.json 2>/dev/null || true
+          git add -A
           if git diff --cached --quiet; then
             echo 'KR3 main menu hotfix is already integrated.'
             exit 0
           fi
           git commit -m 'fix(menu): add Children of Eltan background and anthem autoplay'
+          git reset --hard HEAD
           for attempt in 1 2 3; do
-            git pull --rebase origin master
-            if git push origin HEAD:master; then
+            if git pull --rebase origin master && git push origin HEAD:master; then
               exit 0
             fi
+            echo "Push attempt $attempt failed; retrying..."
             sleep $((attempt * 3))
           done
           exit 1
