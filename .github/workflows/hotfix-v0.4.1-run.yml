@@ -1,0 +1,197 @@
+name: KR3 v0.4.1 Alpha Repair
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/hotfix-v0.4.1-run.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: kr3-v0-4-1-repair
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install yt-dlp
+        run: python -m pip install --disable-pip-version-check -U yt-dlp
+
+      - name: Patch menu and remove duplicate audio runtimes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('game/webgl/index.html')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('  <script type="module" src="src/menuAnthemRuntime.js"></script>\n', '')
+          s = s.replace('  <script type="module" src="src/gameMusicRuntime.js"></script>\n', '')
+          anchor = '      <div id="menuInner">\n'
+          logo = '        <img id="kr3MenuLogo" src="./assets/kr3-children-of-eltan.webp" alt="Космические Рейнджеры 3: Дети Эльтана" draggable="false">\n'
+          if 'id="kr3MenuLogo"' not in s:
+              if anchor not in s:
+                  raise SystemExit('menuInner anchor missing')
+              s = s.replace(anchor, anchor + logo, 1)
+          s = s.replace('v3.9 · камера · 5 слотов сейвов · инфоцентр · спавн с планет', 'v0.4.1 Alpha · Дети Эльтана · Android + WebGL')
+          p.write_text(s, encoding='utf-8')
+
+          cssp = Path('game/webgl/css/style.css')
+          css = cssp.read_text(encoding='utf-8')
+          css = re.sub(r"url\('https://image\.qwenlm\.ai/[^']+'\) center/cover no-repeat,\s*", '', css, count=1)
+          marker = '/* ===== v0.4.1 menu collision + local branding hotfix ===== */'
+          if marker not in css:
+              lines = [
+                  '', '', marker,
+                  '#menu{overflow:hidden}',
+                  '#menuInner{width:100%;max-width:100vw;min-height:0;overflow-y:auto;overflow-x:hidden;justify-content:center;align-content:center;flex-wrap:nowrap;scroll-padding-block:10px}',
+                  '#kr3MenuLogo{display:block;flex:0 0 auto;width:clamp(112px,min(24vw,23vh),230px);max-width:56vw;max-height:25vh;height:auto;object-fit:contain;margin:0 auto clamp(2px,.8vh,8px);filter:drop-shadow(0 8px 22px rgba(0,0,0,.65));pointer-events:none}',
+                  '#menuInner h1,#menuInner .sub,.mbtn,#menuInner .ver{position:relative;flex:0 0 auto;transform:none}',
+                  '.mbtn{margin:0!important}',
+                  '@media (orientation:landscape) and (max-height:760px){#menuInner{justify-content:flex-start;padding-block:calc(5px + var(--kr3-safe-top)) calc(5px + var(--kr3-safe-bottom));gap:4px}#kr3MenuLogo{width:clamp(76px,17vh,125px);max-height:18vh;margin-bottom:0}#menuInner h1{font-size:clamp(19px,4.7vh,32px);line-height:.96}#menuInner .sub{font-size:9px;line-height:1.08;margin-bottom:1px}.mbtn{min-height:30px!important;padding:5px 10px!important;font-size:10px!important}.ver{margin-top:1px!important;font-size:8px!important}}',
+                  '@media (orientation:landscape) and (max-height:520px){#kr3MenuLogo{width:68px;max-height:68px}#menuInner h1{font-size:18px}#menuInner .sub{display:none}.mbtn{min-height:28px!important;padding:4px 9px!important}}',
+              ]
+              css += '\n'.join(lines) + '\n'
+          cssp.write_text(css, encoding='utf-8')
+
+          sw = Path('game/webgl/public/sw.js')
+          t = sw.read_text(encoding='utf-8').replace("const CACHE = 'kr3-app-shell-v1';", "const CACHE = 'kr3-app-shell-v2';")
+          sw.write_text(t, encoding='utf-8')
+          PY
+
+      - name: Copy Children of Eltan badge into WebGL public assets
+        run: |
+          set -euo pipefail
+          mkdir -p game/webgl/public/assets
+          cp game/android/app/src/main/res/drawable/kr3_children_of_eltan.webp game/webgl/public/assets/kr3-children-of-eltan.webp
+          test -s game/webgl/public/assets/kr3-children-of-eltan.webp
+
+      - name: Fetch За краем орбит as a local OGG asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/kr3-anthem game/webgl/music
+          TARGET='game/webgl/music/menu-anthem.ogg'
+          URL='https://www.youtube.com/watch?v=qcmwEXSbQ_U'
+          rm -f "$TARGET" /tmp/kr3-anthem/source.*
+          success=0
+          for client in android_vr web_embedded web_safari android; do
+            rm -f /tmp/kr3-anthem/source.* "$TARGET"
+            if yt-dlp --no-playlist --js-runtimes node --remote-components ejs:github --extractor-args "youtube:player_client=$client" -f 'bestaudio/best' -o '/tmp/kr3-anthem/source.%(ext)s' "$URL"; then
+              source="$(find /tmp/kr3-anthem -maxdepth 1 -type f -name 'source.*' | head -n1)"
+              if test -n "$source"; then
+                ffmpeg -y -v error -i "$source" -vn -c:a libopus -b:a 48k "$TARGET" || true
+                duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$TARGET" 2>/dev/null || true)"
+                if python - "$duration" <<'PY'
+          import sys
+          try:
+              d=float(sys.argv[1])
+          except Exception:
+              raise SystemExit(1)
+          raise SystemExit(0 if 245 <= d <= 265 else 1)
+          PY
+                then
+                  success=1
+                  break
+                fi
+              fi
+            fi
+          done
+          if [ "$success" -ne 1 ]; then
+            echo 'yt-dlp clients failed; trying Piped mirrors'
+            for api in https://pipedapi.kavin.rocks https://pipedapi.adminforge.de https://api.piped.private.coffee https://pipedapi.owo.si; do
+              rm -f /tmp/kr3-anthem/streams.json /tmp/kr3-anthem/source "$TARGET"
+              if curl -fsSL --retry 2 --connect-timeout 10 --max-time 35 "$api/streams/qcmwEXSbQ_U" -o /tmp/kr3-anthem/streams.json; then
+                stream_url="$(python - <<'PY'
+          import json
+          p='/tmp/kr3-anthem/streams.json'
+          try:
+              d=json.load(open(p,encoding='utf-8'))
+              a=[x for x in d.get('audioStreams',[]) if x.get('url')]
+              a.sort(key=lambda x:int(x.get('bitrate') or 0), reverse=True)
+              print(a[0]['url'] if a else '')
+          except Exception:
+              print('')
+          PY
+          )"
+                if test -n "$stream_url" && curl -fL --retry 2 --connect-timeout 10 --max-time 180 "$stream_url" -o /tmp/kr3-anthem/source; then
+                  ffmpeg -y -v error -i /tmp/kr3-anthem/source -vn -c:a libopus -b:a 48k "$TARGET" || true
+                  duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$TARGET" 2>/dev/null || true)"
+                  if python - "$duration" -c 'import sys; d=float(sys.argv[1]); raise SystemExit(0 if 245<=d<=265 else 1)' 2>/dev/null; then
+                    success=1
+                    break
+                  fi
+                fi
+              fi
+            done
+          fi
+          test "$success" -eq 1
+          test -s "$TARGET"
+          ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$TARGET"
+          ls -lh "$TARGET"
+
+      - name: Verify local-only menu audio and one game-music owner
+        run: |
+          set -euo pipefail
+          ! grep -q 'menuAnthemRuntime.js' game/webgl/index.html
+          ! grep -q 'gameMusicRuntime.js' game/webgl/index.html
+          grep -q 'kr3MenuLogo' game/webgl/index.html
+          test -s game/webgl/public/assets/kr3-children-of-eltan.webp
+          test -s game/webgl/music/menu-anthem.ogg
+          grep -q "const MENU_ANTHEM = 'music/menu-anthem.ogg';" game/webgl/js/main.js
+          grep -q 'function playNextTrack' game/webgl/js/main.js
+
+      - name: Arm v0.4.1-alpha release
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = {
+              'release': True,
+              'tag': 'v0.4.1-alpha',
+              'title': 'Космические Рейнджеры 3: Дети Эльтана',
+              'prerelease': True,
+              'reason': 'Срочный v0.4.1 alpha hotfix исправляет меню, локальный гимн и двойное воспроизведение музыки.',
+              'notes': [
+                  'Исправлено наложение кнопок и элементов главного меню на низких и широких экранах.',
+                  'Эмблема «Дети Эльтана» теперь локально отображается в главном меню.',
+                  'Удалён runtime YouTube-плеера: «За краем орбит» упакована в игру как локальный OGG и играет только в меню.',
+                  'Удалён второй игровой музыкальный runtime: OST играет строго по одному треку, затем переключается на следующий.',
+                  'Обновлён PWA cache key, чтобы старые скрипты не оставались в кэше.'
+              ]
+          }
+          Path('.github/release-decision.json').write_text(json.dumps(data, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+          PY
+
+      - name: Commit hotfix to master
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add game/webgl/index.html game/webgl/css/style.css game/webgl/public/sw.js game/webgl/public/assets/kr3-children-of-eltan.webp game/webgl/music/menu-anthem.ogg .github/release-decision.json
+          git commit -m 'fix(v0.4.1): menu layout, local anthem and single-track audio'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:master; then exit 0; fi
+            git pull --rebase origin master
+          done
+          exit 1
