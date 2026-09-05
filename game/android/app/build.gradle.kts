@@ -2,6 +2,11 @@ plugins {
     id("com.android.application")
 }
 
+val releaseKeystorePath = providers.environmentVariable("KR3_KEYSTORE_PATH")
+val releaseKeystorePassword = providers.environmentVariable("KR3_KEYSTORE_PASSWORD")
+val releaseKeyAlias = providers.environmentVariable("KR3_KEY_ALIAS")
+val releaseKeyPassword = providers.environmentVariable("KR3_KEY_PASSWORD")
+
 android {
     namespace = "com.quantdeus.spacerangers3"
     compileSdk = 36
@@ -14,6 +19,17 @@ android {
         versionName = "0.2.0"
     }
 
+    signingConfigs {
+        create("release") {
+            if (releaseKeystorePath.isPresent) {
+                storeFile = file(releaseKeystorePath.get())
+                storePassword = releaseKeystorePassword.orNull
+                keyAlias = releaseKeyAlias.orNull
+                keyPassword = releaseKeyPassword.orNull
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -22,6 +38,7 @@ android {
         release {
             isMinifyEnabled = false
             isDebuggable = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
