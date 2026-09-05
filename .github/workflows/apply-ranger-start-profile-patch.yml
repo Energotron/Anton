@@ -5,6 +5,9 @@ on:
     branches: [master]
     paths:
       - '.github/workflows/apply-ranger-start-profile-patch.yml'
+      - 'game/webgl/js/main.js'
+      - 'scripts/patch_ranger_start_profiles.py'
+  workflow_dispatch:
 
 permissions:
   contents: write
