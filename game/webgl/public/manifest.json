@@ -1,24 +1,24 @@
 {
-  "name": "Космические Рейнджеры 3 WebGL",
-  "short_name": "КР3 WebGL",
-  "description": "Пошаговая космическая RPG на WebGL для Android",
-  "start_url": "/",
+  "name": "Космические Рейнджеры 3",
+  "short_name": "КР3",
+  "description": "Космические Рейнджеры 3 — пошаговая космическая RPG с WebGL-интерфейсом для Android и desktop.",
+  "id": "./",
+  "start_url": "./?mode=app",
+  "scope": "./",
   "display": "standalone",
-  "orientation": "any",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape-primary",
   "background_color": "#04060d",
   "theme_color": "#05070f",
-  "lang": "ru",
+  "lang": "ru-RU",
+  "dir": "ltr",
+  "categories": ["games", "entertainment"],
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/assets/icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/assets/icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
+      "src": "assets/icons/kr3-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "any maskable"
     }
   ]
