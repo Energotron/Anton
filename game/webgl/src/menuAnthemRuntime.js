@@ -50,11 +50,11 @@ function syncUi(doc = document, message = '') {
   if (status) {
     status.textContent = message || (
       playing && autoplayMuted
-        ? 'Видео запущено автоматически · первое касание включает звук'
+        ? 'Браузер заблокировал звук · первое действие восстановит его'
         : playing
           ? (mode === 'local'
-              ? 'Автовоспроизведение · локальный гимн · 4:14'
-              : 'Автовоспроизведение · гимн КР3 · 4:14')
+              ? 'Автовоспроизведение со звуком · локальный гимн · 4:14'
+              : 'Автовоспроизведение со звуком · гимн КР3 · 4:14')
           : 'Главная тема Космических Рейнджеров 3'
     );
   }
@@ -86,6 +86,7 @@ function ensureLocalAudio(doc = document) {
   audio.autoplay = true;
   audio.preload = 'auto';
   audio.volume = MENU_VOLUME / 100;
+  audio.muted = false;
   audio.setAttribute('playsinline', '');
 
   audio.addEventListener('play', () => {
@@ -113,30 +114,32 @@ function ensureLocalAudio(doc = document) {
 }
 
 function unmuteAnthem(doc = document) {
-  if (!playing) return;
-
   if (mode === 'youtube' && youtubeFrame) {
     sendYoutubeCommand('unMute');
     sendYoutubeCommand('setVolume', [MENU_VOLUME]);
     sendYoutubeCommand('playVideo');
+    playing = true;
   } else if (mode === 'local' && localAudio) {
     localAudio.muted = false;
     localAudio.volume = MENU_VOLUME / 100;
-    localAudio.play().catch(() => {});
+    localAudio.play().then(() => {
+      playing = true;
+      syncUi(doc);
+    }).catch(() => {});
   }
 
   autoplayMuted = false;
   syncUi(doc);
 }
 
-function ensureYoutubePlayer(doc = document, { mutedAutoplay = true } = {}) {
+function ensureYoutubePlayer(doc = document, { mutedAutoplay = false } = {}) {
   if (youtubeFrame) {
-    if (mutedAutoplay) {
-      sendYoutubeCommand('mute');
-      autoplayMuted = true;
-    }
+    if (mutedAutoplay) sendYoutubeCommand('mute');
+    else sendYoutubeCommand('unMute');
+    sendYoutubeCommand('setVolume', [MENU_VOLUME]);
     sendYoutubeCommand('playVideo');
     playing = true;
+    autoplayMuted = mutedAutoplay;
     mode = 'youtube';
     syncUi(doc);
     return youtubeFrame;
@@ -153,23 +156,29 @@ function ensureYoutubePlayer(doc = document, { mutedAutoplay = true } = {}) {
   frame.loading = 'eager';
 
   const originParam = PLAYER_ORIGIN ? `&origin=${encodeURIComponent(PLAYER_ORIGIN)}` : '';
-  frame.src = `https://www.youtube-nocookie.com/embed/${VIDEO_ID}?autoplay=1&mute=1&loop=1&playlist=${VIDEO_ID}&playsinline=1&rel=0&controls=1&enablejsapi=1${originParam}`;
+  const muteParam = mutedAutoplay ? 1 : 0;
+  frame.src = `https://www.youtube-nocookie.com/embed/${VIDEO_ID}?autoplay=1&mute=${muteParam}&loop=1&playlist=${VIDEO_ID}&playsinline=1&rel=0&controls=1&enablejsapi=1${originParam}`;
   frame.style.cssText = 'width:min(360px,82vw);aspect-ratio:16/9;border:1px solid rgba(255,215,122,.45);border-radius:10px;display:block;margin:8px auto 0;background:#000;box-shadow:0 10px 28px rgba(0,0,0,.45)';
 
   frame.addEventListener('load', () => {
     if (!menuVisible(doc)) return;
-    sendYoutubeCommand('mute');
-    sendYoutubeCommand('setVolume', [MENU_VOLUME]);
-    sendYoutubeCommand('playVideo');
-    setTimeout(() => {
+
+    const requestSoundPlayback = () => {
       if (!menuVisible(doc) || !youtubeFrame) return;
+      sendYoutubeCommand('unMute');
+      sendYoutubeCommand('setVolume', [MENU_VOLUME]);
+      sendYoutubeCommand('playVideo');
+    };
+
+    if (mutedAutoplay) {
       sendYoutubeCommand('mute');
       sendYoutubeCommand('playVideo');
-    }, 350);
-    setTimeout(() => {
-      if (!menuVisible(doc) || !youtubeFrame) return;
-      sendYoutubeCommand('playVideo');
-    }, 1000);
+    } else {
+      requestSoundPlayback();
+      setTimeout(requestSoundPlayback, 250);
+      setTimeout(requestSoundPlayback, 800);
+      setTimeout(requestSoundPlayback, 1600);
+    }
   });
 
   frameWrap.replaceChildren(frame);
@@ -177,8 +186,10 @@ function ensureYoutubePlayer(doc = document, { mutedAutoplay = true } = {}) {
   youtubeFrame = frame;
   mode = 'youtube';
   playing = true;
-  autoplayMuted = true;
-  syncUi(doc, '🚀 Видео гимна запускается автоматически · первое касание включает звук');
+  autoplayMuted = mutedAutoplay;
+  syncUi(doc, mutedAutoplay
+    ? 'Видео запущено без звука · браузер ограничил autoplay'
+    : '🚀 Запрашиваю автозапуск гимна сразу со звуком');
   return frame;
 }
 
@@ -187,7 +198,7 @@ async function playAnthem(doc = document, options = {}) {
 
   const autoplay = options.autoplay === true;
   loading = true;
-  syncUi(doc, autoplay ? '🚀 Запуск гимна главного меню…' : 'Подключаю главную тему…');
+  syncUi(doc, autoplay ? '🚀 Запуск гимна главного меню со звуком…' : 'Подключаю главную тему…');
 
   try {
     if (localAvailable === null) {
@@ -211,27 +222,25 @@ async function playAnthem(doc = document, options = {}) {
       }
 
       const audio = ensureLocalAudio(doc);
-      if (autoplay) {
-        audio.muted = true;
-        autoplayMuted = true;
-      } else {
-        audio.muted = false;
-        autoplayMuted = false;
-      }
+      audio.muted = false;
+      autoplayMuted = false;
 
       try {
         await audio.play();
         playing = true;
         return;
       } catch (error) {
-        localAvailable = false;
-        autoplayMuted = false;
-        console.warn('KR3 local menu anthem autoplay:', error);
+        console.warn('KR3 local menu anthem autoplay with sound:', error);
+        if (!autoplay || error?.name !== 'NotAllowedError') {
+          localAvailable = false;
+        }
       }
     }
 
-    ensureYoutubePlayer(doc, { mutedAutoplay: autoplay });
-    if (!autoplay) unmuteAnthem(doc);
+    // Sound-first: request unmuted YouTube autoplay. Browsers that have granted
+    // autoplay permission (prior interaction / installed PWA / engagement) will
+    // start the anthem immediately with sound.
+    ensureYoutubePlayer(doc, { mutedAutoplay: false });
   } finally {
     loading = false;
     syncUi(doc);
@@ -287,7 +296,7 @@ function scheduleAutoplay(doc = document, win = window) {
       console.warn('KR3 menu anthem autoplay:', error);
       playing = false;
       autoplayMuted = false;
-      syncUi(doc, 'Нажмите, чтобы включить гимн КР3');
+      syncUi(doc, 'Автозапуск звука заблокирован браузером · нажмите для запуска');
     });
   }, AUTOPLAY_DELAY_MS);
 }
@@ -302,7 +311,7 @@ function mountAnthemUi(doc = document) {
   panel.style.cssText = 'display:grid;justify-items:center;gap:4px;margin-top:8px';
   panel.innerHTML = `
     <button class="mbtn ghost" id="btnMenuAnthem" type="button">▶ ГИМН КР3 — ЗА КРАЕМ ОРБИТ</button>
-    <div id="kr3AnthemStatus" style="font-size:11px;letter-spacing:.08em;color:#ffd77a;opacity:.84;text-align:center">Автовоспроизведение главной темы</div>
+    <div id="kr3AnthemStatus" style="font-size:11px;letter-spacing:.08em;color:#ffd77a;opacity:.84;text-align:center">Автовоспроизведение главной темы со звуком</div>
     <div id="kr3AnthemFrameWrap" hidden></div>`;
 
   const version = menuInner.querySelector('.ver');
@@ -324,18 +333,28 @@ function bindGestureRecovery(doc = document) {
     const target = event.target instanceof Element ? event.target : null;
     if (target?.closest('#kr3SetupLaunch, #contBtn')) return;
 
-    if (playing && autoplayMuted) {
-      unmuteAnthem(doc);
+    if (mode === 'youtube' && youtubeFrame) {
+      sendYoutubeCommand('unMute');
+      sendYoutubeCommand('setVolume', [MENU_VOLUME]);
+      sendYoutubeCommand('playVideo');
+      playing = true;
+      autoplayMuted = false;
+      syncUi(doc);
       return;
     }
 
-    if (mode === 'youtube' && youtubeFrame) {
-      sendYoutubeCommand('playVideo');
-      playing = true;
-      syncUi(doc);
-    } else if (!playing) {
-      playAnthem(doc).catch(() => {});
+    if (mode === 'local' && localAudio) {
+      localAudio.muted = false;
+      localAudio.volume = MENU_VOLUME / 100;
+      localAudio.play().then(() => {
+        playing = true;
+        autoplayMuted = false;
+        syncUi(doc);
+      }).catch(() => {});
+      return;
     }
+
+    if (!playing) playAnthem(doc).catch(() => {});
   };
 
   doc.addEventListener('pointerdown', recover, { capture: true });
