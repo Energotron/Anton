@@ -1,0 +1,58 @@
+name: Import KR3 Menu Anthem
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/import-menu-anthem.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  import-anthem:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install yt-dlp
+        run: python -m pip install --disable-pip-version-check yt-dlp
+
+      - name: Download and convert За краем орбит
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p game/webgl/music
+          yt-dlp \
+            --no-playlist \
+            --extract-audio \
+            --audio-format mp3 \
+            --audio-quality 4 \
+            --output 'game/webgl/music/menu-anthem.%(ext)s' \
+            'https://www.youtube.com/watch?v=qcmwEXSbQ_U'
+          test -s game/webgl/music/menu-anthem.mp3
+          ls -lh game/webgl/music/menu-anthem.mp3
+
+      - name: Commit local anthem asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add game/webgl/music/menu-anthem.mp3
+          if git diff --cached --quiet; then
+            echo 'Anthem asset already matches repository copy.'
+            exit 0
+          fi
+          git commit -m 'feat(audio): bundle За краем орбит menu anthem'
+          git push origin HEAD:master
