@@ -1,5 +1,5 @@
 const VIDEO_ID = 'qcmwEXSbQ_U';
-const LOCAL_SOURCE = 'music/menu-anthem.mp3';
+const LOCAL_SOURCE = 'music/Песня за краем орбит by космические рейнджеры 2 .mp3';
 const PLAYER_ORIGIN = typeof location !== 'undefined' && location.origin !== 'null' ? location.origin : '';
 const AUTOPLAY_DELAY_MS = 80;
 const MENU_VOLUME = 42;
