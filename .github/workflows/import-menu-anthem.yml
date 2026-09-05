@@ -11,9 +11,9 @@ permissions:
   contents: write
 
 jobs:
-  import-anthem:
+  import-anthem-and-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,49 +25,109 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install yt-dlp
+      - name: Install yt-dlp fallback
         run: python -m pip install --disable-pip-version-check -U yt-dlp
 
       - name: Download and convert За краем орбит
         shell: bash
         run: |
-          set -u
-          mkdir -p game/webgl/music
-          URL='https://www.youtube.com/watch?v=qcmwEXSbQ_U'
-          OUT='game/webgl/music/menu-anthem.%(ext)s'
+          set -uo pipefail
+          mkdir -p game/webgl/music /tmp/kr3-anthem
+          VIDEO_ID='qcmwEXSbQ_U'
+          TARGET='game/webgl/music/menu-anthem.mp3'
 
-          download_with_client() {
-            local client="$1"
-            echo "Trying YouTube client: $client"
-            rm -f game/webgl/music/menu-anthem.*
-            yt-dlp \
-              --no-playlist \
-              --js-runtimes node \
-              --remote-components ejs:github \
-              --extractor-args "youtube:player_client=$client" \
-              --extract-audio \
-              --audio-format mp3 \
-              --audio-quality 4 \
-              --output "$OUT" \
-              "$URL"
+          verify_audio() {
+            test -s "$TARGET" || return 1
+            local duration
+            duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$TARGET" 2>/dev/null || true)"
+            python - "$duration" <<'PY'
+          import sys
+          try:
+              d = float(sys.argv[1])
+          except Exception:
+              raise SystemExit(1)
+          # Uploaded reference is ~254 s; keep a generous guard around it.
+          raise SystemExit(0 if 245.0 <= d <= 265.0 else 1)
+          PY
+          }
+
+          download_piped() {
+            local api="$1"
+            local meta='/tmp/kr3-anthem/streams.json'
+            local urlfile='/tmp/kr3-anthem/audio-url.txt'
+            local source='/tmp/kr3-anthem/source-audio'
+            rm -f "$meta" "$urlfile" "$source" "$TARGET"
+            echo "Trying Piped instance: $api"
+            curl -fsSL --retry 2 --connect-timeout 10 --max-time 35 \
+              "$api/streams/$VIDEO_ID" -o "$meta" || return 1
+            python - "$meta" > "$urlfile" <<'PY'
+          import json, sys
+          with open(sys.argv[1], 'r', encoding='utf-8') as f:
+              data = json.load(f)
+          streams = [s for s in data.get('audioStreams', []) if s.get('url')]
+          def rate(s):
+              try:
+                  return int(s.get('bitrate') or 0)
+              except Exception:
+                  return 0
+          streams.sort(key=rate, reverse=True)
+          if not streams:
+              raise SystemExit(1)
+          print(streams[0]['url'])
+          PY
+            local stream_url
+            stream_url="$(cat "$urlfile")"
+            test -n "$stream_url" || return 1
+            curl -fL --retry 2 --connect-timeout 10 --max-time 180 \
+              "$stream_url" -o "$source" || return 1
+            ffmpeg -y -v error -i "$source" -vn -codec:a libmp3lame -q:a 3 "$TARGET" || return 1
+            verify_audio
           }
 
           success=0
-          for client in android_vr web_embedded web_safari 'android_vr,web_embedded' 'web_embedded,web_safari'; do
-            if download_with_client "$client"; then
-              if test -s game/webgl/music/menu-anthem.mp3; then
-                success=1
-                break
-              fi
+          for api in \
+            'https://pipedapi.kavin.rocks' \
+            'https://pipedapi.leptons.xyz' \
+            'https://pipedapi.nosebs.ru' \
+            'https://piped-api.privacy.com.de' \
+            'https://pipedapi.adminforge.de' \
+            'https://api.piped.yt' \
+            'https://pipedapi.owo.si' \
+            'https://api.piped.private.coffee'; do
+            if download_piped "$api"; then
+              success=1
+              break
             fi
           done
 
           if [ "$success" -ne 1 ]; then
-            echo 'All YouTube client profiles failed.' >&2
-            exit 1
+            echo 'Piped mirrors failed; trying yt-dlp clients.'
+            URL="https://www.youtube.com/watch?v=$VIDEO_ID"
+            OUT='game/webgl/music/menu-anthem.%(ext)s'
+            for client in android_vr web_embedded web_safari 'android_vr,web_embedded' 'web_embedded,web_safari'; do
+              rm -f game/webgl/music/menu-anthem.*
+              if yt-dlp \
+                --no-playlist \
+                --js-runtimes node \
+                --remote-components ejs:github \
+                --extractor-args "youtube:player_client=$client" \
+                --extract-audio \
+                --audio-format mp3 \
+                --audio-quality 3 \
+                --output "$OUT" \
+                "$URL" && verify_audio; then
+                success=1
+                break
+              fi
+            done
           fi
 
-          ls -lh game/webgl/music/menu-anthem.mp3
+          if [ "$success" -ne 1 ]; then
+            echo 'Could not obtain the anthem from the exact video source.' >&2
+            exit 1
+          fi
+          ls -lh "$TARGET"
+          ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$TARGET"
 
       - name: Wire anthem to main menu
         shell: bash
@@ -156,16 +216,74 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add game/webgl/music/menu-anthem.mp3 game/webgl/js/main.js
-          if git diff --cached --quiet; then
-            echo 'Menu anthem is already integrated.'
-            exit 0
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat(audio): play За краем орбит in KR3 main menu'
+            for attempt in 1 2 3; do
+              if git push origin HEAD:master; then
+                break
+              fi
+              echo "Push attempt $attempt failed; rebasing on master..."
+              git pull --rebase origin master
+            done
           fi
-          git commit -m 'feat(audio): play За краем орбит in KR3 main menu'
-          for attempt in 1 2 3; do
-            if git push origin HEAD:master; then
-              exit 0
-            fi
-            echo "Push attempt $attempt failed; rebasing on master..."
-            git pull --rebase origin master
-          done
-          git push origin HEAD:master
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install WebGL dependencies
+        working-directory: game/webgl
+        run: npm install --no-audit --no-fund
+
+      - name: Build WebGL game
+        working-directory: game/webgl
+        run: npm run build
+
+      - name: Bundle game into Android assets
+        run: |
+          rm -rf game/android/app/src/main/assets/www
+          mkdir -p game/android/app/src/main/assets/www
+          cp -R game/webgl/dist/. game/android/app/src/main/assets/www/
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android 35 platform
+        shell: bash
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT" -type f -path '*/cmdline-tools/*/bin/sdkmanager' | head -n 1)"
+          fi
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Install Gradle 8.9
+        shell: bash
+        run: |
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /tmp
+          echo "/tmp/gradle-8.9/bin" >> "$GITHUB_PATH"
+
+      - name: Build debug APK
+        working-directory: game/android
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Stage APK
+        run: |
+          mkdir -p artifacts
+          cp game/android/app/build/outputs/apk/debug/app-debug.apk artifacts/KR3-Children-of-Eltan-debug.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KR3-Children-of-Eltan-Android-debug-apk
+          path: artifacts/KR3-Children-of-Eltan-debug.apk
+          if-no-files-found: error
+          retention-days: 30
