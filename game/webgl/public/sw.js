@@ -1,4 +1,4 @@
-const CACHE = 'kr3-app-shell-v1';
+const CACHE = 'kr3-app-shell-v2';
 const APP_SHELL = ['./', './index.html', './manifest.json', './assets/icons/kr3-icon.svg'];
 
 self.addEventListener('install', event => {
