@@ -2,18 +2,8 @@ let deferredInstallPrompt = null;
 let wakeLock = null;
 let installButton = null;
 
-function isApkRuntime(win = window) {
-  try {
-    const mode = new URLSearchParams(win.location?.search || '').get('mode');
-    return mode === 'apk' || /KR3Android/i.test(String(win.navigator?.userAgent || ''));
-  } catch (_) {
-    return false;
-  }
-}
-
 function isStandalone(win = window) {
   return Boolean(
-    isApkRuntime(win) ||
     win.matchMedia?.('(display-mode: standalone)').matches ||
     win.matchMedia?.('(display-mode: fullscreen)').matches ||
     win.navigator?.standalone === true
@@ -21,22 +11,11 @@ function isStandalone(win = window) {
 }
 
 function markAppMode(doc = document, win = window) {
-  const apk = isApkRuntime(win);
   const standalone = isStandalone(win);
   doc.documentElement.classList.toggle('kr3-app-mode', standalone);
   doc.body?.classList.toggle('kr3-app-mode', standalone);
-  doc.documentElement.classList.toggle('kr3-apk-mode', apk);
-  doc.body?.classList.toggle('kr3-apk-mode', apk);
-  doc.documentElement.dataset.kr3DisplayMode = apk ? 'apk' : (standalone ? 'app' : 'browser');
+  doc.documentElement.dataset.kr3DisplayMode = standalone ? 'app' : 'browser';
   return standalone;
-}
-
-function syncViewport(doc = document, win = window) {
-  const viewport = win.visualViewport;
-  const width = Math.max(1, Math.round(viewport?.width || win.innerWidth || doc.documentElement.clientWidth || 1));
-  const height = Math.max(1, Math.round(viewport?.height || win.innerHeight || doc.documentElement.clientHeight || 1));
-  doc.documentElement.style.setProperty('--kr3-app-width', `${width}px`);
-  doc.documentElement.style.setProperty('--kr3-app-height', `${height}px`);
 }
 
 async function requestWakeLock(doc = document, nav = navigator) {
@@ -105,7 +84,7 @@ function mountInstallButton(doc = document) {
 }
 
 async function registerServiceWorker(win = window) {
-  if (isApkRuntime(win) || !('serviceWorker' in win.navigator) || !win.isSecureContext) return null;
+  if (!('serviceWorker' in win.navigator) || !win.isSecureContext) return null;
 
   try {
     const registration = await win.navigator.serviceWorker.register('./sw.js', { scope: './' });
@@ -133,21 +112,8 @@ function bindFirstGesture(doc = document, win = window) {
   doc.addEventListener('keydown', activateAppFeatures, { capture: true, once: true });
 }
 
-function bindViewportSync(doc = document, win = window) {
-  const sync = () => syncViewport(doc, win);
-  sync();
-  win.addEventListener('resize', sync, { passive: true });
-  win.addEventListener('orientationchange', () => {
-    win.setTimeout(sync, 80);
-    win.setTimeout(sync, 350);
-  }, { passive: true });
-  win.visualViewport?.addEventListener?.('resize', sync, { passive: true });
-  win.visualViewport?.addEventListener?.('scroll', sync, { passive: true });
-}
-
 export function bindPwaRuntime(doc = document, win = window) {
   markAppMode(doc, win);
-  bindViewportSync(doc, win);
   registerServiceWorker(win);
   bindFirstGesture(doc, win);
 
@@ -161,30 +127,22 @@ export function bindPwaRuntime(doc = document, win = window) {
     deferredInstallPrompt = null;
     removeInstallButton();
     markAppMode(doc, win);
-    syncViewport(doc, win);
   });
 
   doc.addEventListener('visibilitychange', () => {
-    if (!doc.hidden && isStandalone(win)) {
-      requestWakeLock(doc, win.navigator);
-      syncViewport(doc, win);
-    }
+    if (!doc.hidden && isStandalone(win)) requestWakeLock(doc, win.navigator);
   });
 
   const displayQueries = ['(display-mode: standalone)', '(display-mode: fullscreen)'];
   for (const query of displayQueries) {
     const media = win.matchMedia?.(query);
-    media?.addEventListener?.('change', () => {
-      markAppMode(doc, win);
-      syncViewport(doc, win);
-    });
+    media?.addEventListener?.('change', () => markAppMode(doc, win));
   }
 
   if (deferredInstallPrompt) mountInstallButton(doc);
 
   win.KR3AppMode = Object.freeze({
     isStandalone: () => isStandalone(win),
-    isApk: () => isApkRuntime(win),
     install: async () => {
       if (!deferredInstallPrompt) return false;
       const prompt = deferredInstallPrompt;
@@ -195,8 +153,7 @@ export function bindPwaRuntime(doc = document, win = window) {
       return choice?.outcome === 'accepted';
     },
     lockLandscape: () => requestLandscape(win),
-    keepAwake: () => requestWakeLock(doc, win.navigator),
-    syncViewport: () => syncViewport(doc, win)
+    keepAwake: () => requestWakeLock(doc, win.navigator)
   });
 }
 
