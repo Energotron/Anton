@@ -24,6 +24,7 @@ window.addEventListener('unhandledrejection', e => showErr(String(e.reason)));
 let AC = null, muted = false, musicOn = true;
 let musicAudio = null, musicIndex = 0, musicGen = 0;
 let musicNodes = null; // procedural ambient: { oscs, gains, master, stop }
+const MENU_ANTHEM = 'music/menu-anthem.ogg';
 const MUSIC_TRACKS = [
   'music/fei.mp3',
   'music/fighter.mp3',
@@ -125,6 +126,31 @@ function startProcMusic() {
   } catch (e) {}
 
   musicNodes = { oscs, gains, master };
+}
+
+function startMenuMusic() {
+  stopMusic();
+  if (muted || !musicOn) return;
+  initAudio();
+  musicGen++;
+  const gen = musicGen;
+  const a = new Audio(MENU_ANTHEM);
+  a.loop = true;
+  a.volume = 0.46;
+  musicAudio = a;
+  a.onerror = () => {
+    if (gen !== musicGen) return;
+    musicAudio = null;
+  };
+  a.play().catch(() => {
+    if (gen !== musicGen) return;
+    const resume = () => {
+      if (gen !== musicGen || muted || !musicOn || G.state !== 'menu') return;
+      a.play().catch(() => {});
+    };
+    document.addEventListener('pointerdown', resume, { once: true });
+    document.addEventListener('keydown', resume, { once: true });
+  });
 }
 
 function startMusic() {
@@ -603,7 +629,7 @@ window.addEventListener('keydown', e => {
       $('panel')?.classList.add('hidden');
       $('panel') && ($('panel').innerHTML = '');
     } else if (G.state === 'demo' || G.state === 'game') {
-      stopMusic(); G.state = 'menu';
+      G.state = 'menu'; startMenuMusic();
       $('menu').classList.remove('hidden'); showHud(false);
       $('galClose').classList.add('hidden');
       refreshContinueBtn();
@@ -2032,6 +2058,7 @@ $('sndBtn')?.addEventListener('click', () => {
   muted = !muted;
   $('sndBtn').textContent = muted ? '🔇' : '🔊';
   if (muted) stopMusic();
+  else if (musicOn && G.state === 'menu') startMenuMusic();
   else if (musicOn && (G.state === 'demo' || G.state === 'game')) startMusic();
   sfx.ui();
 });
@@ -2124,6 +2151,7 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 R.render();
+startMenuMusic();
 console.log('%cКР3 WebGL v3.8 — hyperjumps + planet landing (SR2 style)', 'color:#ffd77a;font-weight:bold');
 
 // debug: ?autostart=1 starts game automatically
