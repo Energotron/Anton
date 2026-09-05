@@ -21,6 +21,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Restore v0.4.1 menu anthem from staged chunks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/anthem-hotfix6k/part000.b64 \
+              .github/anthem-hotfix6k/part001.b64 \
+              .github/anthem-hotfix6k/part002.b64 \
+              .github/anthem-hotfix2k/part003.b64 \
+            | tr -d '\r\n' | base64 -d > game/webgl/music/menu-anthem.ogg
+          test -s game/webgl/music/menu-anthem.ogg
+          test "$(wc -c < game/webgl/music/menu-anthem.ogg)" -gt 50000
+          ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 game/webgl/music/menu-anthem.ogg
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -39,6 +52,9 @@ jobs:
           rm -rf game/android/app/src/main/assets/www
           mkdir -p game/android/app/src/main/assets/www
           cp -R game/webgl/dist/. game/android/app/src/main/assets/www/
+          mkdir -p game/android/app/src/main/assets/www/music
+          cp -a game/webgl/music/. game/android/app/src/main/assets/www/music/
+          test -s game/android/app/src/main/assets/www/music/menu-anthem.ogg
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -72,12 +88,12 @@ jobs:
       - name: Stage APK
         run: |
           mkdir -p artifacts
-          cp game/android/app/build/outputs/apk/debug/app-debug.apk artifacts/KR3-debug.apk
+          cp game/android/app/build/outputs/apk/debug/app-debug.apk artifacts/KR3-v0.4.1-alpha-hotfix.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KR3-Android-debug-apk
-          path: artifacts/KR3-debug.apk
+          name: KR3-v0.4.1-alpha-hotfix-apk
+          path: artifacts/KR3-v0.4.1-alpha-hotfix.apk
           if-no-files-found: error
           retention-days: 30
