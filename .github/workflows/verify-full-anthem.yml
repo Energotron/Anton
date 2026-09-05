@@ -1,0 +1,57 @@
+name: Verify Full KR3 Menu Anthem
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/verify-full-anthem.yml'
+      - '.github/scripts/fetch-menu-anthem.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install audio toolchain
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg jq
+          python -m pip install --disable-pip-version-check -U yt-dlp
+
+      - name: Fetch and verify full anthem
+        shell: bash
+        run: bash .github/scripts/fetch-menu-anthem.sh game/webgl/music/menu-anthem.ogg
+
+      - name: Record audio metadata
+        shell: bash
+        run: |
+          ffprobe -v error -show_entries format=duration,size,bit_rate -of default=nw=1 game/webgl/music/menu-anthem.ogg
+          sha256sum game/webgl/music/menu-anthem.ogg > game/webgl/music/menu-anthem.ogg.sha256
+
+      - name: Upload verified anthem
+        uses: actions/upload-artifact@v4
+        with:
+          name: KR3-full-menu-anthem-v0.4.1
+          path: |
+            game/webgl/music/menu-anthem.ogg
+            game/webgl/music/menu-anthem.ogg.sha256
+          if-no-files-found: error
+          retention-days: 7
