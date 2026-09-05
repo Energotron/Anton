@@ -21,6 +21,15 @@ function isMobileRuntime(win = globalThis?.window) {
   }
 }
 
+function isApkRuntime(win = globalThis?.window) {
+  try {
+    const mode = new URLSearchParams(win?.location?.search || '').get('mode');
+    return mode === 'apk' || /KR3Android/i.test(String(win?.navigator?.userAgent || ''));
+  } catch (_) {
+    return false;
+  }
+}
+
 function installCompatibilityContext(canvas) {
   if (!canvas || typeof canvas.getContext !== 'function') return null;
   const nativeGetContext = canvas.getContext.bind(canvas);
@@ -40,10 +49,14 @@ function installMobilePixelRatio(win = globalThis?.window) {
   let descriptor;
   try {
     descriptor = Object.getOwnPropertyDescriptor(win, 'devicePixelRatio');
+    const nativeDpr = Number(win.devicePixelRatio || 1);
+    const preferredDpr = isApkRuntime(win)
+      ? Math.min(1.5, Math.max(1, nativeDpr))
+      : 1;
     Object.defineProperty(win, 'devicePixelRatio', {
       configurable: true,
       enumerable: descriptor?.enumerable ?? true,
-      value: 1,
+      value: preferredDpr,
     });
     return descriptor || { value: undefined };
   } catch (_) {
@@ -77,9 +90,9 @@ function constructRenderer(canvas, { compatibility = false, mobile = false } = {
 export function WebGLRenderer(canvas) {
   const mobile = isMobileRuntime();
 
-  // Mobile/WebView gets the conservative profile on the very first attempt.
-  // This avoids allocating an expensive high-DPR antialiased context only to
-  // fail and retry after the browser has already exhausted GPU resources.
+  // Mobile/WebView gets the conservative profile on the first attempt.
+  // APK mode keeps compatibility settings but renders up to 1.5 DPR so the
+  // fullscreen image stays noticeably sharper without exploding GPU memory.
   if (mobile) {
     try {
       const renderer = constructRenderer(canvas, { compatibility: true, mobile: true });
