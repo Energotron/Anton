@@ -1,0 +1,289 @@
+name: KR3 v0.4.1 Alpha Hotfix
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/hotfix-v0.4.1.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: kr3-v0-4-1-hotfix
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install audio fetcher
+        run: python -m pip install --disable-pip-version-check -U yt-dlp
+
+      - name: Fix main menu DOM and single-owner audio runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('game/webgl/index.html')
+          s = p.read_text(encoding='utf-8')
+
+          # Main.js is the only audio owner. These two legacy runtimes were starting
+          # additional Audio instances and the menu runtime could inject a YouTube iframe.
+          s = s.replace('  <script type="module" src="src/menuAnthemRuntime.js"></script>\n', '')
+          s = s.replace('  <script type="module" src="src/gameMusicRuntime.js"></script>\n', '')
+
+          logo = '        <img id="kr3MenuLogo" src="./assets/kr3-children-of-eltan.webp" alt="Космические Рейнджеры 3: Дети Эльтана" draggable="false">\n'
+          anchor = '      <div id="menuInner">\n'
+          if 'id="kr3MenuLogo"' not in s:
+              if anchor not in s:
+                  raise SystemExit('menuInner anchor not found')
+              s = s.replace(anchor, anchor + logo, 1)
+
+          s = s.replace('v3.9 · камера · 5 слотов сейвов · инфоцентр · спавн с планет',
+                        'v0.4.1 Alpha · Дети Эльтана · Android + WebGL')
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Install local Children of Eltan menu badge
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p game/webgl/public/assets
+          cp game/android/app/src/main/res/drawable/kr3_children_of_eltan.webp \
+             game/webgl/public/assets/kr3-children-of-eltan.webp
+          test -s game/webgl/public/assets/kr3-children-of-eltan.webp
+
+      - name: Harden responsive menu layout and remove remote menu background
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('game/webgl/css/style.css')
+          s = p.read_text(encoding='utf-8')
+          # Do not depend on a remote Qwen image inside the APK/WebGL build.
+          s = re.sub(
+              r"#menuBg\{position:absolute;inset:0;background:\s*\n\s*url\('[^']+'\) center/cover no-repeat,",
+              "#menuBg{position:absolute;inset:0;background:",
+              s,
+              count=1,
+          )
+
+          marker = '/* ===== v0.4.1 menu collision + local branding hotfix ===== */'
+          if marker not in s:
+              s += r'''
+
+/* ===== v0.4.1 menu collision + local branding hotfix ===== */
+#menu{overflow:hidden}
+#menuInner{
+  width:100%;
+  max-width:100vw;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  justify-content:center;
+  align-content:center;
+  flex-wrap:nowrap;
+  scroll-padding-block:10px;
+}
+#kr3MenuLogo{
+  display:block;
+  flex:0 0 auto;
+  width:clamp(112px,min(24vw,23vh),230px);
+  max-width:56vw;
+  max-height:25vh;
+  height:auto;
+  object-fit:contain;
+  margin:0 auto clamp(2px,.8vh,8px);
+  filter:drop-shadow(0 8px 22px rgba(0,0,0,.65));
+  pointer-events:none;
+}
+#menuInner h1,#menuInner .sub,.mbtn,#menuInner .ver{
+  position:relative;
+  flex:0 0 auto;
+  transform:none;
+}
+.mbtn{margin:0!important}
+
+@media (orientation:landscape) and (max-height:760px){
+  #menuInner{justify-content:flex-start;padding-block:calc(5px + var(--kr3-safe-top)) calc(5px + var(--kr3-safe-bottom));gap:4px}
+  #kr3MenuLogo{width:clamp(76px,17vh,125px);max-height:18vh;margin-bottom:0}
+  #menuInner h1{font-size:clamp(19px,4.7vh,32px);line-height:.96}
+  #menuInner .sub{font-size:9px;line-height:1.08;margin-bottom:1px}
+  .mbtn{min-height:30px!important;padding:5px 10px!important;font-size:10px!important}
+  .ver{margin-top:1px!important;font-size:8px!important}
+}
+@media (orientation:landscape) and (max-height:520px){
+  #kr3MenuLogo{width:68px;max-height:68px}
+  #menuInner h1{font-size:18px}
+  #menuInner .sub{display:none}
+  .mbtn{min-height:28px!important;padding:4px 9px!important}
+}
+'''
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Fetch За краем орбит once and package it locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p game/webgl/music /tmp/kr3-anthem
+          VIDEO_ID='qcmwEXSbQ_U'
+          TARGET='game/webgl/music/menu-anthem.ogg'
+
+          verify_audio() {
+            test -s "$TARGET" || return 1
+            local duration
+            duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$TARGET" 2>/dev/null || true)"
+            python - "$duration" <<'PY'
+          import sys
+          try:
+              d = float(sys.argv[1])
+          except Exception:
+              raise SystemExit(1)
+          raise SystemExit(0 if 245.0 <= d <= 265.0 else 1)
+          PY
+          }
+
+          download_piped() {
+            local api="$1"
+            local meta='/tmp/kr3-anthem/streams.json'
+            local urlfile='/tmp/kr3-anthem/audio-url.txt'
+            local source='/tmp/kr3-anthem/source-audio'
+            rm -f "$meta" "$urlfile" "$source" "$TARGET"
+            curl -fsSL --retry 2 --connect-timeout 10 --max-time 35 "$api/streams/$VIDEO_ID" -o "$meta" || return 1
+            python - "$meta" > "$urlfile" <<'PY'
+          import json, sys
+          with open(sys.argv[1], 'r', encoding='utf-8') as f:
+              data = json.load(f)
+          streams = [x for x in data.get('audioStreams', []) if x.get('url')]
+          def rate(x):
+              try: return int(x.get('bitrate') or 0)
+              except Exception: return 0
+          streams.sort(key=rate, reverse=True)
+          if not streams: raise SystemExit(1)
+          print(streams[0]['url'])
+          PY
+            local stream_url
+            stream_url="$(cat "$urlfile")"
+            test -n "$stream_url" || return 1
+            curl -fL --retry 2 --connect-timeout 10 --max-time 180 "$stream_url" -o "$source" || return 1
+            ffmpeg -y -v error -i "$source" -vn -c:a libopus -b:a 48k "$TARGET" || return 1
+            verify_audio
+          }
+
+          success=0
+          for api in \
+            'https://pipedapi.kavin.rocks' \
+            'https://pipedapi.leptons.xyz' \
+            'https://pipedapi.nosebs.ru' \
+            'https://piped-api.privacy.com.de' \
+            'https://pipedapi.adminforge.de' \
+            'https://api.piped.yt' \
+            'https://pipedapi.owo.si' \
+            'https://api.piped.private.coffee'; do
+            if download_piped "$api"; then success=1; break; fi
+          done
+
+          if [ "$success" -ne 1 ]; then
+            URL="https://www.youtube.com/watch?v=$VIDEO_ID"
+            for client in android_vr web_embedded web_safari 'android_vr,web_embedded' 'web_embedded,web_safari'; do
+              rm -f "$TARGET" /tmp/kr3-anthem/source.*
+              if yt-dlp --no-playlist --js-runtimes node --remote-components ejs:github \
+                   --extractor-args "youtube:player_client=$client" \
+                   -f 'bestaudio/best' -o '/tmp/kr3-anthem/source.%(ext)s' "$URL"; then
+                source="$(find /tmp/kr3-anthem -maxdepth 1 -type f -name 'source.*' | head -n1)"
+                if test -n "$source" && ffmpeg -y -v error -i "$source" -vn -c:a libopus -b:a 48k "$TARGET" && verify_audio; then
+                  success=1
+                  break
+                fi
+              fi
+            done
+          fi
+
+          if [ "$success" -ne 1 ]; then
+            echo 'Failed to obtain the exact anthem as a build-time local asset.' >&2
+            exit 1
+          fi
+          echo 'Local anthem verified:'
+          ls -lh "$TARGET"
+          ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$TARGET"
+
+      - name: Bump service-worker cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('game/webgl/public/sw.js')
+          s = p.read_text(encoding='utf-8').replace("const CACHE = 'kr3-app-shell-v1';", "const CACHE = 'kr3-app-shell-v2';")
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Verify hotfix invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -q 'menuAnthemRuntime.js' game/webgl/index.html
+          ! grep -q 'gameMusicRuntime.js' game/webgl/index.html
+          ! grep -q 'youtube.com\|youtube-nocookie.com\|youtu.be' game/webgl/index.html
+          grep -q 'kr3MenuLogo' game/webgl/index.html
+          test -s game/webgl/public/assets/kr3-children-of-eltan.webp
+          test -s game/webgl/music/menu-anthem.ogg
+          grep -q "const MENU_ANTHEM = 'music/menu-anthem.ogg';" game/webgl/js/main.js
+          grep -q 'function playNextTrack' game/webgl/js/main.js
+
+      - name: Arm v0.4.1-alpha release
+        shell: bash
+        run: |
+          cat > .github/release-decision.json <<'JSON'
+          {
+            "release": true,
+            "tag": "v0.4.1-alpha",
+            "title": "Космические Рейнджеры 3: Дети Эльтана",
+            "prerelease": true,
+            "reason": "Срочный v0.4.1 alpha hotfix исправляет меню, локальный гимн и двойное воспроизведение музыки.",
+            "notes": [
+              "Исправлено наложение элементов и кнопок главного меню на низких и широких экранах.",
+              "Эмблема «Космические Рейнджеры 3: Дети Эльтана» теперь локально отображается в главном меню.",
+              "Удалён runtime YouTube-плеера: «За краем орбит» упакована в игру как локальный OGG и крутится только в главном меню.",
+              "Удалён второй игровой музыкальный runtime: OST теперь воспроизводится строго по одному треку с переходом к следующему после окончания.",
+              "Обновлён PWA cache key, чтобы старые скрипты и меню не зависали в кэше."
+            ]
+          }
+          JSON
+
+      - name: Commit hotfix to master
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add game/webgl/index.html game/webgl/css/style.css game/webgl/public/sw.js \
+                  game/webgl/public/assets/kr3-children-of-eltan.webp \
+                  game/webgl/music/menu-anthem.ogg .github/release-decision.json
+          git commit -m 'fix(v0.4.1): menu layout, local anthem and single-track audio'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:master; then exit 0; fi
+            echo "Push attempt $attempt failed; rebasing..."
+            git pull --rebase origin master
+          done
+          exit 1
