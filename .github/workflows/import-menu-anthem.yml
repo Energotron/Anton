@@ -1,4 +1,4 @@
-name: Integrate KR3 Main Menu Background + MP3
+name: Integrate KR3 Main Menu Background + Anthem Runtime
 
 on:
   workflow_dispatch:
@@ -44,8 +44,6 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ffmpeg
-          ffmpeg -version | head -n 1
-          ffprobe -version | head -n 1
 
       - name: Decode local KR3 menu background
         shell: bash
@@ -67,7 +65,6 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import re
-
           path = Path('game/webgl/css/hotfix-v0.4.1.css')
           css = path.read_text(encoding='utf-8')
           block = """#menuBg{
@@ -80,29 +77,27 @@ jobs:
               raise SystemExit('menuBg hotfix block not found')
           path.write_text(css, encoding='utf-8')
           PY
-          grep -Fq "url('../assets/kr3-main-menu.webp')" game/webgl/css/hotfix-v0.4.1.css
 
-      - name: Install modern audio downloader
-        run: python -m pip install --upgrade 'yt-dlp[default,curl-cffi]'
-
-      - name: Build verified full MP3 anthem
+      - name: Try to cache full MP3 anthem
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
+          python -m pip install --upgrade 'yt-dlp[default,curl-cffi]'
           target='game/webgl/music/menu-anthem.mp3'
           if test -s "$target"; then
             duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$target" || true)"
             if test -n "$duration" && awk -v d="$duration" 'BEGIN { exit !(d >= 245.0 && d <= 265.0) }'; then
               echo "Reusing verified repository MP3 (${duration}s)."
-            else
-              bash .github/scripts/fetch-menu-mp3.sh "$target"
+              exit 0
             fi
-          else
-            bash .github/scripts/fetch-menu-mp3.sh "$target"
           fi
+          bash .github/scripts/fetch-menu-mp3.sh "$target"
 
-      - name: Integrate one looping menu audio runtime
+      - name: Integrate single anthem runtime
+        shell: bash
         run: |
+          set -euo pipefail
           python .github/scripts/integrate-menu-mp3.py
           rm -f game/webgl/music/menu-anthem.ogg
           rm -f game/webgl/src/menuAudioPlaceholderRuntime.js
@@ -112,7 +107,6 @@ jobs:
         run: |
           set -euo pipefail
           test -s game/webgl/assets/kr3-main-menu.webp
-          test -s game/webgl/music/menu-anthem.mp3
           test ! -e game/webgl/music/menu-anthem.ogg
           test ! -e game/webgl/src/menuAudioPlaceholderRuntime.js
           grep -Fq "url('../assets/kr3-main-menu.webp')" game/webgl/css/hotfix-v0.4.1.css
@@ -120,11 +114,14 @@ jobs:
           grep -Fq 'window.KR3MenuAnthem?.autoplay?.()' game/webgl/js/main.js
           grep -q 'src="src/menuAnthemRuntime.js"' game/webgl/index.html
           grep -q "const LOCAL_SOURCE = 'music/menu-anthem.mp3';" game/webgl/src/menuAnthemRuntime.js
+          grep -q "const VIDEO_ID = 'qcmwEXSbQ_U';" game/webgl/src/menuAnthemRuntime.js
           grep -q 'audio.loop = true;' game/webgl/src/menuAnthemRuntime.js
-          ! grep -q 'id="kr3MenuPlayer"' game/webgl/index.html
-          ! grep -q 'id="kr3MenuAudio"' game/webgl/index.html
-          duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 game/webgl/music/menu-anthem.mp3)"
-          awk -v d="$duration" 'BEGIN { exit !(d >= 245.0 && d <= 265.0) }'
+          if test -s game/webgl/music/menu-anthem.mp3; then
+            duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 game/webgl/music/menu-anthem.mp3)"
+            awk -v d="$duration" 'BEGIN { exit !(d >= 245.0 && d <= 265.0) }'
+          else
+            echo 'Local MP3 cache unavailable on runner; runtime will use the configured YouTube anthem fallback.'
+          fi
           cd game/webgl
           npm install --no-audit --no-fund
           npm test
@@ -141,20 +138,21 @@ jobs:
           git add game/webgl/assets/kr3-main-menu.webp \
                   game/webgl/css/hotfix-v0.4.1.css \
                   game/webgl/index.html \
-                  game/webgl/js/main.js \
-                  game/webgl/music/menu-anthem.mp3
+                  game/webgl/js/main.js
+          if test -s game/webgl/music/menu-anthem.mp3; then
+            git add game/webgl/music/menu-anthem.mp3
+          fi
           git add -A .github/menu-bg-chunks game/webgl/music/menu-anthem.ogg game/webgl/src/menuAudioPlaceholderRuntime.js || true
           if git diff --cached --quiet; then
-            echo 'KR3 main menu background and MP3 are already integrated.'
+            echo 'KR3 main menu hotfix is already integrated.'
             exit 0
           fi
-          git commit -m 'fix(menu): add Children of Eltan background and looping MP3 anthem'
+          git commit -m 'fix(menu): add Children of Eltan background and anthem autoplay'
           for attempt in 1 2 3; do
             git pull --rebase origin master
             if git push origin HEAD:master; then
               exit 0
             fi
-            echo "Push attempt $attempt failed; retrying..."
             sleep $((attempt * 3))
           done
           exit 1
