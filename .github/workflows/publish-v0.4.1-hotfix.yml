@@ -186,3 +186,5 @@ jobs:
             --title "Космические Рейнджеры 3: Дети Эльтана $TAG" \
             --notes-file /tmp/notes.md \
             --prerelease
+
+# publication trigger: v0.4.1-alpha
