@@ -24,7 +24,7 @@ window.addEventListener('unhandledrejection', e => showErr(String(e.reason)));
 let AC = null, muted = false, musicOn = true;
 let musicAudio = null, musicIndex = 0, musicGen = 0;
 let musicNodes = null; // procedural ambient: { oscs, gains, master, stop }
-const MENU_ANTHEM = 'music/menu-anthem.ogg';
+const MENU_ANTHEM = 'music/menu-anthem.mp3';
 const MUSIC_TRACKS = [
   'music/fei.mp3',
   'music/fighter.mp3',
@@ -131,26 +131,11 @@ function startProcMusic() {
 function startMenuMusic() {
   stopMusic();
   if (muted || !musicOn) return;
-  initAudio();
-  musicGen++;
-  const gen = musicGen;
-  const a = new Audio(MENU_ANTHEM);
-  a.loop = true;
-  a.volume = 0.46;
-  musicAudio = a;
-  a.onerror = () => {
-    if (gen !== musicGen) return;
-    musicAudio = null;
-  };
-  a.play().catch(() => {
-    if (gen !== musicGen) return;
-    const resume = () => {
-      if (gen !== musicGen || muted || !musicOn || G.state !== 'menu') return;
-      a.play().catch(() => {});
-    };
-    document.addEventListener('pointerdown', resume, { once: true });
-    document.addEventListener('keydown', resume, { once: true });
-  });
+  // menuAnthemRuntime owns the only menu audio element. It handles autoplay,
+  // looping, browser gesture recovery and stopping when gameplay starts.
+  const start = () => window.KR3MenuAnthem?.autoplay?.();
+  start();
+  if (!window.KR3MenuAnthem) queueMicrotask(start);
 }
 
 function startMusic() {
