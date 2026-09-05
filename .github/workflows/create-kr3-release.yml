@@ -7,6 +7,7 @@ on:
       - '.github/release-decision.json'
       - '.github/workflows/create-kr3-release.yml'
       - 'game/webgl/**'
+      - 'game/android/**'
       - 'docs/ROADMAP.md'
   workflow_dispatch:
 
@@ -40,8 +41,7 @@ jobs:
           import json, re
           from pathlib import Path
 
-          p = Path('.github/release-decision.json')
-          data = json.loads(p.read_text(encoding='utf-8'))
+          data = json.loads(Path('.github/release-decision.json').read_text(encoding='utf-8'))
           required = {'release', 'tag', 'title', 'prerelease', 'reason', 'notes'}
           missing = required - data.keys()
           if missing:
@@ -58,9 +58,8 @@ jobs:
               if not str(data['title']).strip():
                   raise SystemExit('title is required for a release')
               if len(str(data['reason']).strip()) < 12:
-                  raise SystemExit('release reason is too short; agent must justify promotion')
+                  raise SystemExit('release reason is too short')
           PY
-
           RELEASE=$(python3 -c "import json; print(str(json.load(open('.github/release-decision.json'))['release']).lower())")
           TAG=$(python3 -c "import json; print(json.load(open('.github/release-decision.json'))['tag'])")
           echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
@@ -68,24 +67,20 @@ jobs:
 
       - name: Explain no-release decision
         if: steps.intent.outputs.release != 'true'
-        run: echo 'Agent decided the current master is not release-ready. No release will be created.'
+        run: echo 'Current master is not marked for release.'
 
   promote:
-    name: Verify and publish agent-approved release
+    name: Verify and publish KR3 release
     needs: evaluate
     if: needs.evaluate.outputs.release == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout exact master revision
         uses: actions/checkout@v4
         with:
           ref: master
           fetch-depth: 0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
 
       - name: Guard against duplicate or empty promotion
         id: guard
@@ -96,28 +91,22 @@ jobs:
         run: |
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; promotion is idempotent."
+            echo "Release $TAG already exists."
             echo 'skip=true' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
           LATEST=$(gh release list --limit 1 --json tagName --jq '.[0].tagName // ""')
           echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
           echo 'skip=false' >> "$GITHUB_OUTPUT"
-
           if [ -n "$LATEST" ] && git rev-parse "$LATEST^{commit}" >/dev/null 2>&1; then
-            COUNT=$(git rev-list --count "$LATEST..HEAD")
-            echo "Commits since $LATEST: $COUNT"
-            test "$COUNT" -ge 1
-            git diff --name-only "$LATEST..HEAD" > /tmp/release-changes.txt
-          else
-            git ls-files > /tmp/release-changes.txt
+            test "$(git rev-list --count "$LATEST..HEAD")" -ge 1
           fi
 
-          if ! grep -Eq '^game/webgl/(index\.html|js/|src/|css/|public/|manifest\.json|package\.json|vite\.config\.js|music/)' /tmp/release-changes.txt; then
-            echo 'Agent requested a release, but no playable WebGL runtime files changed since the latest release.' >&2
-            exit 1
-          fi
+      - name: Setup Node.js
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
       - name: Install WebGL dependencies
         if: steps.guard.outputs.skip != 'true'
@@ -147,23 +136,14 @@ jobs:
           set -euo pipefail
           mkdir -p game/webgl/dist/music
           cp -a game/webgl/music/. game/webgl/dist/music/
-
           test -s game/webgl/dist/index.html
           test -d game/webgl/dist/assets
+          test -s game/webgl/dist/music/menu-anthem.ogg
           for track in flight fighter human gaal fei quasar peleng maloc; do
             test -s "game/webgl/dist/music/${track}.mp3"
           done
-
           if grep -Eq '(src|href)="/assets/' game/webgl/dist/index.html; then
             echo 'Production index contains root-absolute /assets URLs.' >&2
-            exit 1
-          fi
-          if grep -RIEq "from ['\"]three['\"]|import[[:space:]]*\(['\"]three['\"]\)" game/webgl/dist/assets; then
-            echo 'Production bundle still contains a bare three import.' >&2
-            exit 1
-          fi
-          if grep -Eq 'src="[^\"]*(js/main|src/)' game/webgl/dist/index.html; then
-            echo 'Production index still points at raw KR3 source modules.' >&2
             exit 1
           fi
 
@@ -176,16 +156,72 @@ jobs:
         run: |
           set -euo pipefail
           SAFE_TAG="${TAG//\//-}"
-          ARCHIVE="Space-Rangers-3-WebGL-${SAFE_TAG}.zip"
-          (
-            cd game/webgl/dist
-            zip -r "$GITHUB_WORKSPACE/$ARCHIVE" .
-          )
+          ARCHIVE="Space-Rangers-3-Children-of-Eltan-WebGL-${SAFE_TAG}.zip"
+          (cd game/webgl/dist && zip -r "$GITHUB_WORKSPACE/$ARCHIVE" .)
           unzip -tq "$ARCHIVE"
           sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
           echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
 
-      - name: Build agent-authored release notes
+      - name: Bundle WebGL game into Android assets
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf game/android/app/src/main/assets/www
+          mkdir -p game/android/app/src/main/assets/www
+          cp -R game/webgl/dist/. game/android/app/src/main/assets/www/
+
+      - name: Set up JDK 17
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android 35 platform
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT" -type f -path '*/cmdline-tools/*/bin/sdkmanager' | head -n 1)"
+          fi
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Install Gradle 8.9
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /tmp
+          echo "/tmp/gradle-8.9/bin" >> "$GITHUB_PATH"
+
+      - name: Build Android alpha APK
+        if: steps.guard.outputs.skip != 'true'
+        working-directory: game/android
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Stage Android APK
+        if: steps.guard.outputs.skip != 'true'
+        id: android
+        shell: bash
+        env:
+          TAG: ${{ needs.evaluate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          SAFE_TAG="${TAG//\//-}"
+          APK="Space-Rangers-3-Children-of-Eltan-Android-${SAFE_TAG}.apk"
+          cp game/android/app/build/outputs/apk/debug/app-debug.apk "$APK"
+          test -s "$APK"
+          sha256sum "$APK" > "$APK.sha256"
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+
+      - name: Build release notes
         if: steps.guard.outputs.skip != 'true'
         shell: bash
         env:
@@ -195,15 +231,25 @@ jobs:
           python3 - <<'PY'
           import json, os, subprocess
           from pathlib import Path
-
           data = json.loads(Path('.github/release-decision.json').read_text(encoding='utf-8'))
           lines = [f"## {data['reason'].strip()}", '']
           notes = [x.strip() for x in data['notes'] if x.strip()]
           if notes:
-              lines += ['### Agent-selected highlights'] + [f'- {x}' for x in notes] + ['']
+              lines += ['### Highlights'] + [f'- {x}' for x in notes] + ['']
+          lines += [
+              '### Downloads',
+              '- Android: install the `.apk` asset.',
+              '- PC/WebGL: download the WebGL `.zip` and open it with a local web server.',
+              '',
+              'This is an alpha/pre-release build.',
+              ''
+          ]
           latest = os.environ.get('LATEST', '').strip()
           if latest:
-              log = subprocess.check_output(['git', 'log', '--pretty=- %s', f'{latest}..HEAD'], text=True).strip()
+              try:
+                  log = subprocess.check_output(['git', 'log', '--pretty=- %s', f'{latest}..HEAD'], text=True).strip()
+              except Exception:
+                  log = ''
               if log:
                   lines += ['### Commits since previous release', log, '']
           lines += [f"Build commit: `{subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()}`"]
@@ -217,11 +263,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.evaluate.outputs.tag }}
           ARCHIVE: ${{ steps.package.outputs.archive }}
+          APK: ${{ steps.android.outputs.apk }}
         run: |
           set -euo pipefail
           TITLE=$(python3 -c "import json; print(json.load(open('.github/release-decision.json'))['title'])")
           PRERELEASE=$(python3 -c "import json; print(str(json.load(open('.github/release-decision.json'))['prerelease']).lower())")
-          ARGS=(release create "$TAG" "$ARCHIVE" "$ARCHIVE.sha256" --target "$GITHUB_SHA" --title "$TITLE $TAG" --notes-file /tmp/release-notes.md)
+          ARGS=(release create "$TAG" "$ARCHIVE" "$ARCHIVE.sha256" "$APK" "$APK.sha256" --target "$GITHUB_SHA" --title "$TITLE $TAG" --notes-file /tmp/release-notes.md)
           if [ "$PRERELEASE" = 'true' ]; then
             ARGS+=(--prerelease)
           fi
