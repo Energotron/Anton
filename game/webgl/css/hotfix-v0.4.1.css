@@ -1,0 +1,51 @@
+/* KR3 v0.4.1 Alpha hotfix: responsive menu + local-only branding fallback */
+#menu{overflow:hidden}
+#menuBg{
+  background:
+    radial-gradient(circle at 50% 22%,rgba(34,86,130,.35),transparent 34%),
+    radial-gradient(circle at 72% 68%,rgba(44,72,120,.24),transparent 38%),
+    linear-gradient(180deg,#07111c 0%,#02050a 100%) !important;
+}
+#menuInner{
+  width:100%;
+  max-width:100vw;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  justify-content:center;
+  align-content:center;
+  flex-wrap:nowrap;
+  scroll-padding-block:10px;
+}
+#kr3MenuLogo{
+  display:block;
+  flex:0 0 auto;
+  width:clamp(96px,min(22vw,21vh),210px);
+  max-width:52vw;
+  max-height:23vh;
+  height:auto;
+  object-fit:contain;
+  margin:0 auto clamp(2px,.8vh,8px);
+  filter:drop-shadow(0 8px 22px rgba(0,0,0,.65));
+  pointer-events:none;
+}
+#menuInner h1,#menuInner .sub,.mbtn,#menuInner .ver{
+  position:relative;
+  flex:0 0 auto;
+  transform:none;
+}
+.mbtn{margin:0!important}
+@media (orientation:landscape) and (max-height:760px){
+  #menuInner{justify-content:flex-start;padding-block:calc(5px + var(--kr3-safe-top,0px)) calc(5px + var(--kr3-safe-bottom,0px));gap:4px}
+  #kr3MenuLogo{width:clamp(62px,15vh,110px);max-height:16vh;margin-bottom:0}
+  #menuInner h1{font-size:clamp(18px,4.4vh,30px);line-height:.96}
+  #menuInner .sub{font-size:9px;line-height:1.08;margin-bottom:1px}
+  .mbtn{min-height:30px!important;padding:5px 10px!important;font-size:10px!important}
+  .ver{margin-top:1px!important;font-size:8px!important}
+}
+@media (orientation:landscape) and (max-height:520px){
+  #kr3MenuLogo{width:54px;max-height:54px}
+  #menuInner h1{font-size:17px}
+  #menuInner .sub{display:none}
+  .mbtn{min-height:28px!important;padding:4px 9px!important}
+}
