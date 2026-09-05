@@ -13,7 +13,7 @@ permissions:
 jobs:
   import-anthem:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,16 +69,103 @@ jobs:
 
           ls -lh game/webgl/music/menu-anthem.mp3
 
-      - name: Commit local anthem asset
+      - name: Wire anthem to main menu
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('game/webgl/js/main.js')
+          s = p.read_text(encoding='utf-8')
+
+          if "const MENU_ANTHEM = 'music/menu-anthem.mp3';" not in s:
+              needle = "const MUSIC_TRACKS = ["
+              if needle not in s:
+                  raise SystemExit('MUSIC_TRACKS anchor not found')
+              s = s.replace(needle, "const MENU_ANTHEM = 'music/menu-anthem.mp3';\n" + needle, 1)
+
+          if 'function startMenuMusic() {' not in s:
+              needle = "function startMusic() {"
+              block = r'''function startMenuMusic() {
+            stopMusic();
+            if (muted || !musicOn) return;
+            initAudio();
+            musicGen++;
+            const gen = musicGen;
+            const a = new Audio(MENU_ANTHEM);
+            a.loop = true;
+            a.volume = 0.46;
+            musicAudio = a;
+            a.onerror = () => {
+              if (gen !== musicGen) return;
+              musicAudio = null;
+            };
+            a.play().catch(() => {
+              if (gen !== musicGen) return;
+              const resume = () => {
+                if (gen !== musicGen || muted || !musicOn || G.state !== 'menu') return;
+                a.play().catch(() => {});
+              };
+              document.addEventListener('pointerdown', resume, { once: true });
+              document.addEventListener('keydown', resume, { once: true });
+            });
+          }
+
+          '''
+              if needle not in s:
+                  raise SystemExit('startMusic anchor not found')
+              s = s.replace(needle, block + needle, 1)
+
+          old = "stopMusic(); G.state = 'menu';"
+          new = "G.state = 'menu'; startMenuMusic();"
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          old = "  if (muted) stopMusic();\n  else if (musicOn && (G.state === 'demo' || G.state === 'game')) startMusic();"
+          new = "  if (muted) stopMusic();\n  else if (musicOn && G.state === 'menu') startMenuMusic();\n  else if (musicOn && (G.state === 'demo' || G.state === 'game')) startMusic();"
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          needle = "requestAnimationFrame(frame);\nR.render();\nconsole.log('%cКР3 WebGL"
+          if 'R.render();\nstartMenuMusic();\nconsole.log' not in s:
+              if needle not in s:
+                  raise SystemExit('startup anchor not found')
+              s = s.replace(
+                  "requestAnimationFrame(frame);\nR.render();\nconsole.log('%cКР3 WebGL",
+                  "requestAnimationFrame(frame);\nR.render();\nstartMenuMusic();\nconsole.log('%cКР3 WebGL",
+                  1,
+              )
+
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Verify KR3 branding and menu audio integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s game/webgl/music/menu-anthem.mp3
+          test -s game/android/app/src/main/res/drawable/kr3_children_of_eltan.webp
+          grep -q "const MENU_ANTHEM = 'music/menu-anthem.mp3';" game/webgl/js/main.js
+          grep -q 'function startMenuMusic()' game/webgl/js/main.js
+          grep -q '@drawable/kr3_children_of_eltan' game/android/app/src/main/AndroidManifest.xml
+
+      - name: Commit KR3 menu anthem integration
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add game/webgl/music/menu-anthem.mp3
+          git add game/webgl/music/menu-anthem.mp3 game/webgl/js/main.js
           if git diff --cached --quiet; then
-            echo 'Anthem asset already matches repository copy.'
+            echo 'Menu anthem is already integrated.'
             exit 0
           fi
-          git commit -m 'feat(audio): bundle За краем орбит menu anthem'
+          git commit -m 'feat(audio): play За краем орбит in KR3 main menu'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:master; then
+              exit 0
+            fi
+            echo "Push attempt $attempt failed; rebasing on master..."
+            git pull --rebase origin master
+          done
           git push origin HEAD:master
