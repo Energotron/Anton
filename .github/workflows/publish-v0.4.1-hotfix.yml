@@ -1,0 +1,188 @@
+name: Publish KR3 v0.4.1 Alpha Hotfix
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/publish-v0.4.1-hotfix.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kr3-v0-4-1-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TAG: v0.4.1-alpha
+
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Guard existing release
+        id: guard
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo 'skip=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'skip=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify v0.4.1 source hotfix
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'v0.4.1 Alpha' game/webgl/index.html
+          grep -q 'hotfix-v0.4.1.css' game/webgl/index.html
+          ! grep -q 'src/menuAnthemRuntime.js' game/webgl/index.html
+          ! grep -q 'src/gameMusicRuntime.js' game/webgl/index.html
+          grep -q "const MENU_ANTHEM = 'music/menu-anthem.ogg';" game/webgl/js/main.js
+          grep -q 'function playNextTrack' game/webgl/js/main.js
+
+      - name: Restore Children of Eltan anthem
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/anthem-hotfix6k/part000.b64 \
+              .github/anthem-hotfix6k/part001.b64 \
+              .github/anthem-hotfix6k/part002.b64 \
+              .github/anthem-hotfix2k/part003.b64 \
+            | tr -d '\r\n' | base64 -d > game/webgl/music/menu-anthem.ogg
+          test -s game/webgl/music/menu-anthem.ogg
+          test "$(wc -c < game/webgl/music/menu-anthem.ogg)" -gt 50000
+          test "$(head -c 4 game/webgl/music/menu-anthem.ogg)" = 'OggS'
+
+      - name: Set up Node.js
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install WebGL dependencies
+        if: steps.guard.outputs.skip != 'true'
+        run: npm install --prefix game/webgl --no-audit --no-fund --package-lock=false
+
+      - name: Run gameplay tests
+        if: steps.guard.outputs.skip != 'true'
+        run: npm test --prefix game/webgl
+
+      - name: Build WebGL
+        if: steps.guard.outputs.skip != 'true'
+        run: npm run build --prefix game/webgl
+
+      - name: Package WebGL runtime
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p game/webgl/dist/music
+          cp -a game/webgl/music/. game/webgl/dist/music/
+          test -s game/webgl/dist/index.html
+          test -s game/webgl/dist/music/menu-anthem.ogg
+          WEBZIP="Space-Rangers-3-Children-of-Eltan-WebGL-${TAG}.zip"
+          (cd game/webgl/dist && zip -qr "$GITHUB_WORKSPACE/$WEBZIP" .)
+          unzip -tq "$WEBZIP"
+          sha256sum "$WEBZIP" > "$WEBZIP.sha256"
+          echo "WEBZIP=$WEBZIP" >> "$GITHUB_ENV"
+
+      - name: Bundle WebGL into Android assets
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf game/android/app/src/main/assets/www
+          mkdir -p game/android/app/src/main/assets/www
+          cp -R game/webgl/dist/. game/android/app/src/main/assets/www/
+          test -s game/android/app/src/main/assets/www/music/menu-anthem.ogg
+
+      - name: Set up JDK 17
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android 35 platform
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT" -type f -path '*/cmdline-tools/*/bin/sdkmanager' | head -n 1)"
+          fi
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Install Gradle 8.9
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /tmp
+          echo '/tmp/gradle-8.9/bin' >> "$GITHUB_PATH"
+
+      - name: Build Android APK
+        if: steps.guard.outputs.skip != 'true'
+        working-directory: game/android
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Stage release files
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="Space-Rangers-3-Children-of-Eltan-Android-${TAG}.apk"
+          cp game/android/app/build/outputs/apk/debug/app-debug.apk "$APK"
+          test -s "$APK"
+          sha256sum "$APK" > "$APK.sha256"
+          echo "APK=$APK" >> "$GITHUB_ENV"
+
+      - name: Publish v0.4.1-alpha
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/notes.md <<'EOF'
+          ## KR3 v0.4.1 Alpha Hotfix
+
+          Срочный hotfix первой публичной альфы «Космические Рейнджеры 3: Дети Эльтана».
+
+          ### Исправлено
+          - устранено наложение кнопок и элементов главного меню на низких и широких экранах;
+          - меню переведено на локальный responsive hotfix без удалённого фонового изображения;
+          - удалены два конфликтующих аудио-runtime: музыкой теперь управляет одно ядро `main.js`;
+          - «За краем орбит» восстанавливается как локальный OGG и упаковывается в APK/WebGL;
+          - игровой OST воспроизводится по одному треку с последовательным переключением;
+          - PWA cache key обновлён до v2, чтобы старое меню и скрипты не зависали в кэше.
+
+          ### Сборки
+          - Android APK
+          - переносимая WebGL ZIP
+          - SHA-256 для обеих сборок
+          EOF
+          gh release create "$TAG" \
+            "$APK" "$APK.sha256" "$WEBZIP" "$WEBZIP.sha256" \
+            --target "$GITHUB_SHA" \
+            --title "Космические Рейнджеры 3: Дети Эльтана $TAG" \
+            --notes-file /tmp/notes.md \
+            --prerelease
