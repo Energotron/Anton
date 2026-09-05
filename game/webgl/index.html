@@ -5,8 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#05070f">
 <meta name="description" content="Космические Рейнджеры 3 — WebGL pseudo-3D">
+<meta name="application-name" content="КР3">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="КР3">
+<meta name="format-detection" content="telephone=no">
+<meta name="screen-orientation" content="landscape">
 <title>Космические Рейнджеры 3 — WebGL</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icons/kr3-icon.svg" type="image/svg+xml">
 <link href="https://cdn.jsdelivr.net/npm/@fontsource/russo-one@5.0.20/index.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/@fontsource/exo-2@5.0.43/400.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/@fontsource/exo-2@5.0.43/700.css" rel="stylesheet">
@@ -82,6 +90,8 @@
     }
   }
   </script>
+  <!-- App/PWA runtime is loaded first so install/fullscreen lifecycle is ready immediately. -->
+  <script type="module" src="src/pwaRuntime.js"></script>
   <!-- Runtime guards must load before main.js so browser audio/save APIs are wrapped safely. -->
   <script type="module" src="src/audioRuntimeGuard.js"></script>
   <script type="module" src="src/saveSlotsRuntime.js"></script>
