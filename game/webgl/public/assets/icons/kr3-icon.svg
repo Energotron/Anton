@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Космические Рейнджеры 3">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="72%">
+      <stop offset="0" stop-color="#18264a"/>
+      <stop offset="0.55" stop-color="#080d1d"/>
+      <stop offset="1" stop-color="#02040a"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff0a6"/>
+      <stop offset="0.45" stop-color="#ffd76a"/>
+      <stop offset="1" stop-color="#d98b22"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="183" fill="none" stroke="#6bb8ff" stroke-opacity=".18" stroke-width="5"/>
+  <path d="M92 323c87-88 188-139 328-150-117 33-202 83-270 158 91-40 179-48 278-27-121 6-214 36-286 90z" fill="#69b9ff" fill-opacity=".22"/>
+  <path d="M114 352c79-94 173-158 282-190-89 50-158 111-209 185 73-34 144-47 211-41-92 13-169 43-230 91z" fill="url(#gold)"/>
+  <circle cx="369" cy="145" r="9" fill="#fff5c4"/>
+  <circle cx="153" cy="143" r="5" fill="#9ed2ff"/>
+  <circle cx="411" cy="292" r="4" fill="#9ed2ff"/>
+  <text x="256" y="278" text-anchor="middle" fill="#ffffff" font-family="Arial,Helvetica,sans-serif" font-size="124" font-weight="900" letter-spacing="-10">КР3</text>
+</svg>
