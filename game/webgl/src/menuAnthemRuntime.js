@@ -8,6 +8,7 @@ let mode = null;
 let playing = false;
 let loading = false;
 let localProbe = null;
+let localAvailable = null;
 
 function menuVisible(doc = document) {
   const menu = doc.getElementById('menu');
@@ -54,11 +55,17 @@ function syncUi(doc = document, message = '') {
   }
 }
 
-async function hasLocalAnthem() {
+function hasLocalAnthem() {
   if (!localProbe) {
     localProbe = fetch(LOCAL_SOURCE, { method: 'HEAD', cache: 'no-store' })
-      .then(response => response.ok)
-      .catch(() => false);
+      .then(response => {
+        localAvailable = response.ok;
+        return localAvailable;
+      })
+      .catch(() => {
+        localAvailable = false;
+        return false;
+      });
   }
   return localProbe;
 }
@@ -81,11 +88,12 @@ function ensureLocalAudio(doc = document) {
     syncUi(doc);
   });
   audio.addEventListener('error', () => {
+    localAvailable = false;
     localProbe = Promise.resolve(false);
     if (mode === 'local') {
       mode = null;
       playing = false;
-      syncUi(doc, 'Локальный файл недоступен — переключаюсь на YouTube');
+      syncUi(doc, 'Локальный файл недоступен — включите гимн ещё раз');
     }
   });
   localAudio = audio;
@@ -115,11 +123,12 @@ function ensureYoutubePlayer(doc = document) {
 
 async function playAnthem(doc = document) {
   if (loading || !menuVisible(doc)) return;
-  loading = true;
-  syncUi(doc, 'Подключаю главную тему…');
 
-  try {
-    if (await hasLocalAnthem()) {
+  // If the local file was positively detected during preload, use it.
+  if (localAvailable === true) {
+    loading = true;
+    syncUi(doc, 'Подключаю локальную главную тему…');
+    try {
       mode = 'local';
       if (youtubeFrame) {
         sendYoutubeCommand('stopVideo');
@@ -128,27 +137,29 @@ async function playAnthem(doc = document) {
       }
       await ensureLocalAudio(doc).play();
       playing = true;
+    } catch (error) {
+      localAvailable = false;
+      playing = false;
+      mode = null;
+      console.warn('KR3 local menu anthem:', error);
+    } finally {
+      loading = false;
       syncUi(doc);
-      return;
     }
-
-    mode = 'youtube';
-    if (youtubeFrame) {
-      sendYoutubeCommand('playVideo');
-      playing = true;
-    } else {
-      ensureYoutubePlayer(doc);
-    }
-    syncUi(doc);
-  } catch (error) {
-    playing = false;
-    mode = null;
-    syncUi(doc, 'Нажмите ещё раз для запуска гимна');
-    console.warn('KR3 menu anthem:', error);
-  } finally {
-    loading = false;
-    syncUi(doc);
+    return;
   }
+
+  // Create the YouTube player synchronously inside the click gesture so mobile
+  // browsers allow autoplay. A background probe keeps local-file support ready.
+  if (localAvailable === null) hasLocalAnthem().catch(() => false);
+  mode = 'youtube';
+  if (youtubeFrame) {
+    sendYoutubeCommand('playVideo');
+    playing = true;
+  } else {
+    ensureYoutubePlayer(doc);
+  }
+  syncUi(doc);
 }
 
 function pauseAnthem(doc = document) {
@@ -226,8 +237,8 @@ export function bindMenuAnthem(doc = document, win = window) {
   win.addEventListener('pagehide', () => stopAnthem(doc));
 
   const preload = () => { hasLocalAnthem().catch(() => false); };
-  if ('requestIdleCallback' in win) win.requestIdleCallback(preload, { timeout: 2500 });
-  else win.setTimeout(preload, 1200);
+  if ('requestIdleCallback' in win) win.requestIdleCallback(preload, { timeout: 1200 });
+  else win.setTimeout(preload, 250);
 
   win.KR3MenuAnthem = Object.freeze({
     play: () => playAnthem(doc),
