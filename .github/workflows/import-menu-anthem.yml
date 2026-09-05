@@ -1,4 +1,4 @@
-name: Import KR3 Menu Anthem
+name: Integrate KR3 Children of Eltan Menu Anthem
 
 on:
   workflow_dispatch:
@@ -11,9 +11,10 @@ permissions:
   contents: write
 
 jobs:
-  import-anthem-and-build:
+  integrate-and-build:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,111 +26,16 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install yt-dlp fallback
-        run: python -m pip install --disable-pip-version-check -U yt-dlp
-
-      - name: Download and convert За краем орбит
+      - name: Verify supplied KR3 assets
         shell: bash
         run: |
-          set -uo pipefail
-          mkdir -p game/webgl/music /tmp/kr3-anthem
-          VIDEO_ID='qcmwEXSbQ_U'
-          TARGET='game/webgl/music/menu-anthem.mp3'
+          set -euo pipefail
+          test -s game/webgl/music/menu-anthem.ogg
+          test -s game/android/app/src/main/res/drawable/kr3_children_of_eltan.webp
+          grep -q '@drawable/kr3_children_of_eltan' game/android/app/src/main/AndroidManifest.xml
+          ls -lh game/webgl/music/menu-anthem.ogg game/android/app/src/main/res/drawable/kr3_children_of_eltan.webp
 
-          verify_audio() {
-            test -s "$TARGET" || return 1
-            local duration
-            duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$TARGET" 2>/dev/null || true)"
-            python - "$duration" <<'PY'
-          import sys
-          try:
-              d = float(sys.argv[1])
-          except Exception:
-              raise SystemExit(1)
-          # Uploaded reference is ~254 s; keep a generous guard around it.
-          raise SystemExit(0 if 245.0 <= d <= 265.0 else 1)
-          PY
-          }
-
-          download_piped() {
-            local api="$1"
-            local meta='/tmp/kr3-anthem/streams.json'
-            local urlfile='/tmp/kr3-anthem/audio-url.txt'
-            local source='/tmp/kr3-anthem/source-audio'
-            rm -f "$meta" "$urlfile" "$source" "$TARGET"
-            echo "Trying Piped instance: $api"
-            curl -fsSL --retry 2 --connect-timeout 10 --max-time 35 \
-              "$api/streams/$VIDEO_ID" -o "$meta" || return 1
-            python - "$meta" > "$urlfile" <<'PY'
-          import json, sys
-          with open(sys.argv[1], 'r', encoding='utf-8') as f:
-              data = json.load(f)
-          streams = [s for s in data.get('audioStreams', []) if s.get('url')]
-          def rate(s):
-              try:
-                  return int(s.get('bitrate') or 0)
-              except Exception:
-                  return 0
-          streams.sort(key=rate, reverse=True)
-          if not streams:
-              raise SystemExit(1)
-          print(streams[0]['url'])
-          PY
-            local stream_url
-            stream_url="$(cat "$urlfile")"
-            test -n "$stream_url" || return 1
-            curl -fL --retry 2 --connect-timeout 10 --max-time 180 \
-              "$stream_url" -o "$source" || return 1
-            ffmpeg -y -v error -i "$source" -vn -codec:a libmp3lame -q:a 3 "$TARGET" || return 1
-            verify_audio
-          }
-
-          success=0
-          for api in \
-            'https://pipedapi.kavin.rocks' \
-            'https://pipedapi.leptons.xyz' \
-            'https://pipedapi.nosebs.ru' \
-            'https://piped-api.privacy.com.de' \
-            'https://pipedapi.adminforge.de' \
-            'https://api.piped.yt' \
-            'https://pipedapi.owo.si' \
-            'https://api.piped.private.coffee'; do
-            if download_piped "$api"; then
-              success=1
-              break
-            fi
-          done
-
-          if [ "$success" -ne 1 ]; then
-            echo 'Piped mirrors failed; trying yt-dlp clients.'
-            URL="https://www.youtube.com/watch?v=$VIDEO_ID"
-            OUT='game/webgl/music/menu-anthem.%(ext)s'
-            for client in android_vr web_embedded web_safari 'android_vr,web_embedded' 'web_embedded,web_safari'; do
-              rm -f game/webgl/music/menu-anthem.*
-              if yt-dlp \
-                --no-playlist \
-                --js-runtimes node \
-                --remote-components ejs:github \
-                --extractor-args "youtube:player_client=$client" \
-                --extract-audio \
-                --audio-format mp3 \
-                --audio-quality 3 \
-                --output "$OUT" \
-                "$URL" && verify_audio; then
-                success=1
-                break
-              fi
-            done
-          fi
-
-          if [ "$success" -ne 1 ]; then
-            echo 'Could not obtain the anthem from the exact video source.' >&2
-            exit 1
-          fi
-          ls -lh "$TARGET"
-          ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$TARGET"
-
-      - name: Wire anthem to main menu
+      - name: Wire За краем орбит to the main menu
         shell: bash
         run: |
           python - <<'PY'
@@ -138,11 +44,14 @@ jobs:
           p = Path('game/webgl/js/main.js')
           s = p.read_text(encoding='utf-8')
 
-          if "const MENU_ANTHEM = 'music/menu-anthem.mp3';" not in s:
+          # Normalize any previous draft path to the bundled Ogg asset.
+          s = s.replace("const MENU_ANTHEM = 'music/menu-anthem.mp3';", "const MENU_ANTHEM = 'music/menu-anthem.ogg';")
+
+          if "const MENU_ANTHEM = 'music/menu-anthem.ogg';" not in s:
               needle = "const MUSIC_TRACKS = ["
               if needle not in s:
                   raise SystemExit('MUSIC_TRACKS anchor not found')
-              s = s.replace(needle, "const MENU_ANTHEM = 'music/menu-anthem.mp3';\n" + needle, 1)
+              s = s.replace(needle, "const MENU_ANTHEM = 'music/menu-anthem.ogg';\n" + needle, 1)
 
           if 'function startMenuMusic() {' not in s:
               needle = "function startMusic() {"
@@ -176,46 +85,44 @@ jobs:
                   raise SystemExit('startMusic anchor not found')
               s = s.replace(needle, block + needle, 1)
 
-          old = "stopMusic(); G.state = 'menu';"
-          new = "G.state = 'menu'; startMenuMusic();"
-          if old in s:
-              s = s.replace(old, new, 1)
+          # Returning from the game to menu restores the anthem.
+          s = s.replace("stopMusic(); G.state = 'menu';", "G.state = 'menu'; startMenuMusic();", 1)
 
+          # The music toggle knows which soundtrack belongs to which state.
           old = "  if (muted) stopMusic();\n  else if (musicOn && (G.state === 'demo' || G.state === 'game')) startMusic();"
           new = "  if (muted) stopMusic();\n  else if (musicOn && G.state === 'menu') startMenuMusic();\n  else if (musicOn && (G.state === 'demo' || G.state === 'game')) startMusic();"
           if old in s:
               s = s.replace(old, new, 1)
 
-          needle = "requestAnimationFrame(frame);\nR.render();\nconsole.log('%cКР3 WebGL"
+          # Start the anthem on the initial menu. Android WebView is configured
+          # to allow media playback without requiring a user gesture; browsers
+          # that still block autoplay resume on the first pointer/key event.
+          startup_old = "requestAnimationFrame(frame);\nR.render();\nconsole.log('%cКР3 WebGL"
+          startup_new = "requestAnimationFrame(frame);\nR.render();\nstartMenuMusic();\nconsole.log('%cКР3 WebGL"
           if 'R.render();\nstartMenuMusic();\nconsole.log' not in s:
-              if needle not in s:
+              if startup_old not in s:
                   raise SystemExit('startup anchor not found')
-              s = s.replace(
-                  "requestAnimationFrame(frame);\nR.render();\nconsole.log('%cКР3 WebGL",
-                  "requestAnimationFrame(frame);\nR.render();\nstartMenuMusic();\nconsole.log('%cКР3 WebGL",
-                  1,
-              )
+              s = s.replace(startup_old, startup_new, 1)
 
           p.write_text(s, encoding='utf-8')
           PY
 
-      - name: Verify KR3 branding and menu audio integration
+      - name: Verify menu music integration
         shell: bash
         run: |
           set -euo pipefail
-          test -s game/webgl/music/menu-anthem.mp3
-          test -s game/android/app/src/main/res/drawable/kr3_children_of_eltan.webp
-          grep -q "const MENU_ANTHEM = 'music/menu-anthem.mp3';" game/webgl/js/main.js
+          grep -q "const MENU_ANTHEM = 'music/menu-anthem.ogg';" game/webgl/js/main.js
           grep -q 'function startMenuMusic()' game/webgl/js/main.js
+          grep -q 'startMenuMusic();' game/webgl/js/main.js
           grep -q '@drawable/kr3_children_of_eltan' game/android/app/src/main/AndroidManifest.xml
 
-      - name: Commit KR3 menu anthem integration
+      - name: Commit menu integration to master
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add game/webgl/music/menu-anthem.mp3 game/webgl/js/main.js
+          git add game/webgl/js/main.js
           if ! git diff --cached --quiet; then
             git commit -m 'feat(audio): play За краем орбит in KR3 main menu'
             for attempt in 1 2 3; do
@@ -225,6 +132,8 @@ jobs:
               echo "Push attempt $attempt failed; rebasing on master..."
               git pull --rebase origin master
             done
+          else
+            echo 'Main-menu anthem code is already integrated.'
           fi
 
       - name: Set up Node.js
@@ -240,11 +149,20 @@ jobs:
         working-directory: game/webgl
         run: npm run build
 
+      - name: Ensure anthem is in WebGL dist
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p game/webgl/dist/music
+          cp game/webgl/music/menu-anthem.ogg game/webgl/dist/music/menu-anthem.ogg
+          test -s game/webgl/dist/music/menu-anthem.ogg
+
       - name: Bundle game into Android assets
         run: |
           rm -rf game/android/app/src/main/assets/www
           mkdir -p game/android/app/src/main/assets/www
           cp -R game/webgl/dist/. game/android/app/src/main/assets/www/
+          test -s game/android/app/src/main/assets/www/music/menu-anthem.ogg
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
