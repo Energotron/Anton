@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" role="img" aria-label="Космический фон главного меню КР3" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="space" cx="58%" cy="30%" r="78%">
+      <stop offset="0" stop-color="#173a66"/>
+      <stop offset=".34" stop-color="#0a1930"/>
+      <stop offset=".7" stop-color="#050a18"/>
+      <stop offset="1" stop-color="#01030a"/>
+    </radialGradient>
+    <radialGradient id="nebulaA" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#7147bb" stop-opacity=".52"/>
+      <stop offset=".45" stop-color="#304fa2" stop-opacity=".24"/>
+      <stop offset="1" stop-color="#182743" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="nebulaB" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#d06a31" stop-opacity=".34"/>
+      <stop offset=".45" stop-color="#7d3144" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#1a1427" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="planet" cx="35%" cy="28%" r="70%">
+      <stop offset="0" stop-color="#d7eeff"/>
+      <stop offset=".18" stop-color="#5ca6d5"/>
+      <stop offset=".55" stop-color="#1b426f"/>
+      <stop offset=".82" stop-color="#071427"/>
+      <stop offset="1" stop-color="#01040a"/>
+    </radialGradient>
+    <linearGradient id="ship" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f9f5d0"/>
+      <stop offset=".45" stop-color="#d4a84d"/>
+      <stop offset="1" stop-color="#4b2d17"/>
+    </linearGradient>
+    <linearGradient id="trail" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#58c8ff" stop-opacity="0"/>
+      <stop offset=".6" stop-color="#58c8ff" stop-opacity=".52"/>
+      <stop offset="1" stop-color="#e5fbff" stop-opacity=".9"/>
+    </linearGradient>
+    <filter id="blur80"><feGaussianBlur stdDeviation="80"/></filter>
+    <filter id="glow"><feGaussianBlur stdDeviation="10" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <pattern id="stars" width="180" height="180" patternUnits="userSpaceOnUse">
+      <circle cx="18" cy="26" r="1.4" fill="#fff" opacity=".84"/>
+      <circle cx="71" cy="48" r=".8" fill="#9fdcff" opacity=".72"/>
+      <circle cx="137" cy="17" r="1.1" fill="#fff4c4" opacity=".68"/>
+      <circle cx="159" cy="92" r="1.7" fill="#fff" opacity=".5"/>
+      <circle cx="45" cy="130" r="1" fill="#83bfff" opacity=".66"/>
+      <circle cx="104" cy="154" r="1.2" fill="#fff" opacity=".7"/>
+      <circle cx="171" cy="165" r=".7" fill="#fff" opacity=".8"/>
+    </pattern>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#space)"/>
+  <ellipse cx="1380" cy="230" rx="680" ry="410" fill="url(#nebulaA)" filter="url(#blur80)"/>
+  <ellipse cx="310" cy="850" rx="650" ry="380" fill="url(#nebulaB)" filter="url(#blur80)"/>
+  <rect width="1920" height="1080" fill="url(#stars)" opacity=".95"/>
+  <g opacity=".8">
+    <circle cx="310" cy="205" r="2.8" fill="#fff" filter="url(#glow)"/>
+    <circle cx="1510" cy="130" r="3.2" fill="#dff7ff" filter="url(#glow)"/>
+    <circle cx="1750" cy="440" r="2.5" fill="#ffe3a6" filter="url(#glow)"/>
+    <circle cx="950" cy="94" r="2.4" fill="#fff" filter="url(#glow)"/>
+  </g>
+  <g transform="translate(1550 760)">
+    <circle r="245" fill="url(#planet)"/>
+    <ellipse rx="360" ry="72" fill="none" stroke="#78b7d8" stroke-width="12" opacity=".38" transform="rotate(-12)"/>
+    <ellipse rx="365" ry="78" fill="none" stroke="#c7e9f8" stroke-width="3" opacity=".3" transform="rotate(-12)"/>
+  </g>
+  <path d="M280 825C505 758 706 685 1015 568" fill="none" stroke="url(#trail)" stroke-width="14" opacity=".72" filter="url(#glow)"/>
+  <g transform="translate(1018 566) rotate(-23)">
+    <path d="M0-72L104 42L35 28L0 86L-35 28L-104 42Z" fill="url(#ship)"/>
+    <path d="M0-37L43 25L0 12L-43 25Z" fill="#eaf8ff" opacity=".92"/>
+    <circle cy="36" r="11" fill="#6fd9ff" filter="url(#glow)"/>
+  </g>
+  <rect width="1920" height="1080" fill="url(#space)" opacity=".08"/>
+</svg>
