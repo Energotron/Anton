@@ -1,4 +1,4 @@
-name: Integrate KR3 Children of Eltan Menu Anthem
+name: Integrate KR3 MP3 Menu Player
 
 on:
   workflow_dispatch:
@@ -10,198 +10,184 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: kr3-menu-mp3-integration
+  cancel-in-progress: false
+
 jobs:
-  integrate-and-build:
+  integrate:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 35
 
     steps:
-      - name: Checkout
+      - name: Checkout latest WebGL master
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Python
+      - name: Set up Python and Node
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Verify supplied KR3 assets
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install audio downloader
+        run: python -m pip install --upgrade yt-dlp
+
+      - name: Fetch the full За краем орбит source and encode MP3
         shell: bash
         run: |
           set -euo pipefail
-          test -s game/webgl/music/menu-anthem.ogg
-          test -s game/android/app/src/main/res/drawable/kr3_children_of_eltan.webp
-          grep -q '@drawable/kr3_children_of_eltan' game/android/app/src/main/AndroidManifest.xml
-          ls -lh game/webgl/music/menu-anthem.ogg game/android/app/src/main/res/drawable/kr3_children_of_eltan.webp
+          VIDEO_ID='qcmwEXSbQ_U'
+          URL="https://www.youtube.com/watch?v=${VIDEO_ID}"
+          WORK="$RUNNER_TEMP/kr3-menu-source"
+          TARGET='game/webgl/music/menu-anthem.mp3'
+          mkdir -p "$WORK" "$(dirname "$TARGET")"
+          rm -f "$WORK"/* "$TARGET"
 
-      - name: Wire За краем орбит to the main menu
+          source_file=''
+          for client in android_vr web_embedded web_safari 'android_vr,web_embedded' 'web_embedded,web_safari'; do
+            rm -f "$WORK"/source.*
+            if yt-dlp --no-playlist --js-runtimes node --remote-components ejs:github \
+                --extractor-args "youtube:player_client=${client}" \
+                -f 'bestaudio/best' -o "$WORK/source.%(ext)s" "$URL"; then
+              source_file="$(find "$WORK" -maxdepth 1 -type f -name 'source.*' | head -n 1)"
+              if test -n "$source_file" && test -s "$source_file"; then
+                break
+              fi
+            fi
+          done
+
+          if ! test -s "${source_file:-}"; then
+            for api in \
+              'https://pipedapi.adminforge.de' \
+              'https://pipedapi.owo.si' \
+              'https://api.piped.private.coffee' \
+              'https://pipedapi.nosebs.ru' \
+              'https://piped-api.privacy.com.de' \
+              'https://pipedapi.leptons.xyz'; do
+              rm -f "$WORK/streams.json" "$WORK/piped-source"
+              if ! curl -fsSL --retry 2 --connect-timeout 10 --max-time 35 \
+                  "$api/streams/$VIDEO_ID" -o "$WORK/streams.json"; then
+                continue
+              fi
+              stream_url="$(jq -r '[.audioStreams[]? | select(.url != null)] | sort_by(.bitrate // 0) | last | .url // empty' "$WORK/streams.json" 2>/dev/null || true)"
+              test -n "$stream_url" || continue
+              if curl -fL --retry 2 --connect-timeout 10 --max-time 180 \
+                  "$stream_url" -o "$WORK/piped-source"; then
+                source_file="$WORK/piped-source"
+                break
+              fi
+            done
+          fi
+
+          test -s "${source_file:-}" || { echo 'Unable to fetch full anthem source.' >&2; exit 1; }
+
+          ffmpeg -y -v error -i "$source_file" -map 0:a:0 -vn \
+            -c:a libmp3lame -b:a 96k -ar 44100 -ac 2 -map_metadata -1 \
+            -id3v2_version 3 -metadata title='За краем орбит' \
+            -metadata artist='Космические Рейнджеры 2' "$TARGET"
+
+          duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$TARGET")"
+          codec="$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=nw=1:nk=1 "$TARGET")"
+          bitrate="$(ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate -of default=nw=1:nk=1 "$TARGET")"
+          test "$codec" = 'mp3'
+          awk -v d="$duration" 'BEGIN { exit !(d >= 245.0 && d <= 265.0) }'
+          awk -v b="$bitrate" 'BEGIN { exit !(b >= 90000 && b <= 100000) }'
+          ffmpeg -v error -i "$TARGET" -f null - >/dev/null 2>&1
+          printf 'Verified MP3: duration=%s sec bitrate=%s size=%s bytes\n' "$duration" "$bitrate" "$(stat -c%s "$TARGET")"
+          sha256sum "$TARGET"
+
+      - name: Wire the native player into the existing WebGL audio engine
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          p = Path('game/webgl/js/main.js')
-          s = p.read_text(encoding='utf-8')
+          main = Path('game/webgl/js/main.js')
+          source = main.read_text(encoding='utf-8')
+          source = source.replace(
+              "const MENU_ANTHEM = 'music/menu-anthem.ogg';",
+              "const MENU_ANTHEM = 'music/menu-anthem.mp3';",
+          )
 
-          # Normalize any previous draft path to the bundled Ogg asset.
-          s = s.replace("const MENU_ANTHEM = 'music/menu-anthem.mp3';", "const MENU_ANTHEM = 'music/menu-anthem.ogg';")
+          old_audio = "  const a = new Audio(MENU_ANTHEM);\n  a.loop = true;"
+          new_audio = "  const a = document.getElementById('kr3MenuAudio') || new Audio(MENU_ANTHEM);\n  if (!a.getAttribute('src')) a.src = MENU_ANTHEM;\n  a.loop = true;"
+          if old_audio in source:
+              source = source.replace(old_audio, new_audio, 1)
+          elif "document.getElementById('kr3MenuAudio')" not in source:
+              raise SystemExit('startMenuMusic audio anchor not found')
 
-          if "const MENU_ANTHEM = 'music/menu-anthem.ogg';" not in s:
-              needle = "const MUSIC_TRACKS = ["
-              if needle not in s:
-                  raise SystemExit('MUSIC_TRACKS anchor not found')
-              s = s.replace(needle, "const MENU_ANTHEM = 'music/menu-anthem.ogg';\n" + needle, 1)
+          old_cleanup = "      musicAudio.pause();\n      musicAudio.removeAttribute('src');\n      musicAudio.load();"
+          new_cleanup = "      musicAudio.pause();\n      if (musicAudio.id === 'kr3MenuAudio') {\n        musicAudio.currentTime = 0;\n      } else {\n        musicAudio.removeAttribute('src');\n        musicAudio.load();\n      }"
+          source = source.replace(old_cleanup, new_cleanup)
 
-          if 'function startMenuMusic() {' not in s:
-              needle = "function startMusic() {"
-              block = r'''function startMenuMusic() {
-            stopMusic();
-            if (muted || !musicOn) return;
-            initAudio();
-            musicGen++;
-            const gen = musicGen;
-            const a = new Audio(MENU_ANTHEM);
-            a.loop = true;
-            a.volume = 0.46;
-            musicAudio = a;
-            a.onerror = () => {
-              if (gen !== musicGen) return;
-              musicAudio = null;
-            };
-            a.play().catch(() => {
-              if (gen !== musicGen) return;
-              const resume = () => {
-                if (gen !== musicGen || muted || !musicOn || G.state !== 'menu') return;
-                a.play().catch(() => {});
-              };
-              document.addEventListener('pointerdown', resume, { once: true });
-              document.addEventListener('keydown', resume, { once: true });
-            });
-          }
+          if "const MENU_ANTHEM = 'music/menu-anthem.mp3';" not in source:
+              raise SystemExit('MP3 anthem constant was not installed')
+          if "document.getElementById('kr3MenuAudio')" not in source:
+              raise SystemExit('Native menu player was not connected')
+          main.write_text(source, encoding='utf-8')
 
-          '''
-              if needle not in s:
-                  raise SystemExit('startMusic anchor not found')
-              s = s.replace(needle, block + needle, 1)
-
-          # Returning from the game to menu restores the anthem.
-          s = s.replace("stopMusic(); G.state = 'menu';", "G.state = 'menu'; startMenuMusic();", 1)
-
-          # The music toggle knows which soundtrack belongs to which state.
-          old = "  if (muted) stopMusic();\n  else if (musicOn && (G.state === 'demo' || G.state === 'game')) startMusic();"
-          new = "  if (muted) stopMusic();\n  else if (musicOn && G.state === 'menu') startMenuMusic();\n  else if (musicOn && (G.state === 'demo' || G.state === 'game')) startMusic();"
-          if old in s:
-              s = s.replace(old, new, 1)
-
-          # Start the anthem on the initial menu. Android WebView is configured
-          # to allow media playback without requiring a user gesture; browsers
-          # that still block autoplay resume on the first pointer/key event.
-          startup_old = "requestAnimationFrame(frame);\nR.render();\nconsole.log('%cКР3 WebGL"
-          startup_new = "requestAnimationFrame(frame);\nR.render();\nstartMenuMusic();\nconsole.log('%cКР3 WebGL"
-          if 'R.render();\nstartMenuMusic();\nconsole.log' not in s:
-              if startup_old not in s:
-                  raise SystemExit('startup anchor not found')
-              s = s.replace(startup_old, startup_new, 1)
-
-          p.write_text(s, encoding='utf-8')
+          index = Path('game/webgl/index.html')
+          html = index.read_text(encoding='utf-8')
+          player = '''        <section id="kr3MenuPlayer" aria-label="Музыкальный плеер главного меню" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation()" style="width:min(460px,86vw);margin:8px auto 2px;padding:9px 12px 10px;border:1px solid rgba(255,215,122,.42);border-radius:12px;background:linear-gradient(180deg,rgba(15,26,54,.84),rgba(4,8,20,.9));box-shadow:0 10px 28px rgba(0,0,0,.38),inset 0 0 22px rgba(65,130,255,.08);box-sizing:border-box">
+          <div style="font:700 12px/1.25 'Exo 2',sans-serif;letter-spacing:.12em;color:#ffd77a;text-align:center;margin-bottom:6px">♫ ЗА КРАЕМ ОРБИТ · ГИМН КР3</div>
+          <audio id="kr3MenuAudio" src="music/menu-anthem.mp3" controls loop preload="auto" controlslist="nodownload noplaybackrate" style="display:block;width:100%;height:38px;accent-color:#ffd77a">Ваш браузер не поддерживает MP3-плеер.</audio>
+          <div style="margin-top:5px;font:400 10px/1.2 'Exo 2',sans-serif;letter-spacing:.08em;color:#9fb8e8;text-align:center">Полная версия · 4:14 · MP3 · 96 кбит/с</div>
+        </section>
+'''
+          if 'id="kr3MenuPlayer"' not in html:
+              anchor = '        <div class="ver">'
+              if anchor not in html:
+                  raise SystemExit('Menu version anchor not found')
+              html = html.replace(anchor, player + anchor, 1)
+          else:
+              html = html.replace('music/menu-anthem.ogg', 'music/menu-anthem.mp3')
+          index.write_text(html, encoding='utf-8')
           PY
 
-      - name: Verify menu music integration
+          rm -f game/webgl/music/menu-anthem.ogg
+
+      - name: Verify integration and WebGL build
         shell: bash
         run: |
           set -euo pipefail
-          grep -q "const MENU_ANTHEM = 'music/menu-anthem.ogg';" game/webgl/js/main.js
-          grep -q 'function startMenuMusic()' game/webgl/js/main.js
-          grep -q 'startMenuMusic();' game/webgl/js/main.js
-          grep -q '@drawable/kr3_children_of_eltan' game/android/app/src/main/AndroidManifest.xml
+          test -s game/webgl/music/menu-anthem.mp3
+          test ! -e game/webgl/music/menu-anthem.ogg
+          grep -q "const MENU_ANTHEM = 'music/menu-anthem.mp3';" game/webgl/js/main.js
+          grep -q "document.getElementById('kr3MenuAudio')" game/webgl/js/main.js
+          grep -q 'id="kr3MenuPlayer"' game/webgl/index.html
+          grep -q 'src="music/menu-anthem.mp3"' game/webgl/index.html
+          cd game/webgl
+          npm install --no-audit --no-fund
+          npm test
+          npm run build
+          mkdir -p dist/music
+          cp music/menu-anthem.mp3 dist/music/menu-anthem.mp3
+          test -s dist/music/menu-anthem.mp3
 
-      - name: Commit menu integration to master
+      - name: Commit MP3 player to master
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add game/webgl/js/main.js
-          if ! git diff --cached --quiet; then
-            git commit -m 'feat(audio): play За краем орбит in KR3 main menu'
-            for attempt in 1 2 3; do
-              if git push origin HEAD:master; then
-                break
-              fi
-              echo "Push attempt $attempt failed; rebasing on master..."
-              git pull --rebase origin master
-            done
-          else
-            echo 'Main-menu anthem code is already integrated.'
+          git add game/webgl/index.html game/webgl/js/main.js game/webgl/music/menu-anthem.mp3
+          git rm -f --ignore-unmatch game/webgl/music/menu-anthem.ogg
+          if git diff --cached --quiet; then
+            echo 'MP3 menu player is already integrated.'
+            exit 0
           fi
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install WebGL dependencies
-        working-directory: game/webgl
-        run: npm install --no-audit --no-fund
-
-      - name: Build WebGL game
-        working-directory: game/webgl
-        run: npm run build
-
-      - name: Ensure anthem is in WebGL dist
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p game/webgl/dist/music
-          cp game/webgl/music/menu-anthem.ogg game/webgl/dist/music/menu-anthem.ogg
-          test -s game/webgl/dist/music/menu-anthem.ogg
-
-      - name: Bundle game into Android assets
-        run: |
-          rm -rf game/android/app/src/main/assets/www
-          mkdir -p game/android/app/src/main/assets/www
-          cp -R game/webgl/dist/. game/android/app/src/main/assets/www/
-          test -s game/android/app/src/main/assets/www/music/menu-anthem.ogg
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Install Android 35 platform
-        shell: bash
-        run: |
-          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER="$(find "$SDK_ROOT" -type f -path '*/cmdline-tools/*/bin/sdkmanager' | head -n 1)"
-          fi
-          test -n "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Install Gradle 8.9
-        shell: bash
-        run: |
-          curl -fsSL https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/gradle.zip
-          unzip -q /tmp/gradle.zip -d /tmp
-          echo "/tmp/gradle-8.9/bin" >> "$GITHUB_PATH"
-
-      - name: Build debug APK
-        working-directory: game/android
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
-
-      - name: Stage APK
-        run: |
-          mkdir -p artifacts
-          cp game/android/app/build/outputs/apk/debug/app-debug.apk artifacts/KR3-Children-of-Eltan-debug.apk
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: KR3-Children-of-Eltan-Android-debug-apk
-          path: artifacts/KR3-Children-of-Eltan-debug.apk
-          if-no-files-found: error
-          retention-days: 30
+          git commit -m 'feat(webgl): add compressed MP3 anthem player to main menu'
+          for attempt in 1 2 3; do
+            git pull --rebase origin master
+            if git push origin HEAD:master; then
+              exit 0
+            fi
+            echo "Push attempt $attempt failed; retrying..."
+            sleep $((attempt * 3))
+          done
+          exit 1
