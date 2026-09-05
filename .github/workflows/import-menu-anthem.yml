@@ -26,21 +26,47 @@ jobs:
           python-version: '3.12'
 
       - name: Install yt-dlp
-        run: python -m pip install --disable-pip-version-check yt-dlp
+        run: python -m pip install --disable-pip-version-check -U yt-dlp
 
       - name: Download and convert За краем орбит
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           mkdir -p game/webgl/music
-          yt-dlp \
-            --no-playlist \
-            --extract-audio \
-            --audio-format mp3 \
-            --audio-quality 4 \
-            --output 'game/webgl/music/menu-anthem.%(ext)s' \
-            'https://www.youtube.com/watch?v=qcmwEXSbQ_U'
-          test -s game/webgl/music/menu-anthem.mp3
+          URL='https://www.youtube.com/watch?v=qcmwEXSbQ_U'
+          OUT='game/webgl/music/menu-anthem.%(ext)s'
+
+          download_with_client() {
+            local client="$1"
+            echo "Trying YouTube client: $client"
+            rm -f game/webgl/music/menu-anthem.*
+            yt-dlp \
+              --no-playlist \
+              --js-runtimes node \
+              --remote-components ejs:github \
+              --extractor-args "youtube:player_client=$client" \
+              --extract-audio \
+              --audio-format mp3 \
+              --audio-quality 4 \
+              --output "$OUT" \
+              "$URL"
+          }
+
+          success=0
+          for client in android_vr web_embedded web_safari 'android_vr,web_embedded' 'web_embedded,web_safari'; do
+            if download_with_client "$client"; then
+              if test -s game/webgl/music/menu-anthem.mp3; then
+                success=1
+                break
+              fi
+            fi
+          done
+
+          if [ "$success" -ne 1 ]; then
+            echo 'All YouTube client profiles failed.' >&2
+            exit 1
+          fi
+
           ls -lh game/webgl/music/menu-anthem.mp3
 
       - name: Commit local anthem asset
