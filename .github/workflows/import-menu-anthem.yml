@@ -6,6 +6,8 @@ on:
     branches: [master]
     paths:
       - '.github/workflows/import-menu-anthem.yml'
+      - '.github/scripts/fetch-menu-mp3.sh'
+      - '.github/scripts/integrate-menu-mp3.py'
 
 permissions:
   contents: write
@@ -17,7 +19,7 @@ concurrency:
 jobs:
   integrate:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
 
     steps:
       - name: Checkout latest WebGL master
@@ -35,8 +37,8 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install audio downloader
-        run: python -m pip install --upgrade yt-dlp
+      - name: Install modern audio downloader
+        run: python -m pip install --upgrade 'yt-dlp[default,curl-cffi]'
 
       - name: Build verified compressed MP3
         run: bash .github/scripts/fetch-menu-mp3.sh game/webgl/music/menu-anthem.mp3
@@ -56,6 +58,8 @@ jobs:
           grep -q "document.getElementById('kr3MenuAudio')" game/webgl/js/main.js
           grep -q 'id="kr3MenuPlayer"' game/webgl/index.html
           grep -q 'src="music/menu-anthem.mp3"' game/webgl/index.html
+          duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 game/webgl/music/menu-anthem.mp3)"
+          awk -v d="$duration" 'BEGIN { exit !(d >= 245.0 && d <= 265.0) }'
           cd game/webgl
           npm install --no-audit --no-fund
           npm test
