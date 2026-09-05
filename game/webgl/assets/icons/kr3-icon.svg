@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Космические Рейнджеры 3">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="78%">
+      <stop offset="0" stop-color="#182B50"/>
+      <stop offset="0.55" stop-color="#080E20"/>
+      <stop offset="1" stop-color="#02040A"/>
+    </radialGradient>
+    <linearGradient id="ship" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFF2B0"/>
+      <stop offset="0.45" stop-color="#FFD76A"/>
+      <stop offset="1" stop-color="#E99126"/>
+    </linearGradient>
+    <linearGradient id="trail" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#56BFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#56BFFF" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#B6E8FF" stop-opacity="0.1"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="120" fill="url(#bg)"/>
+  <ellipse cx="256" cy="264" rx="198" ry="105" fill="none" stroke="#5FC3FF" stroke-width="15" stroke-opacity="0.9" transform="rotate(-9 256 264)"/>
+  <path d="M78 354C177 295 288 275 444 289C347 311 259 347 125 427Z" fill="url(#trail)"/>
+  <path d="M256 70L349 343L273 304L256 454L239 304L163 343Z" fill="url(#ship)"/>
+  <path d="M256 127L302 278L256 258L210 278Z" fill="#EEF9FF"/>
+  <circle cx="388" cy="118" r="14" fill="#FFF5C7"/>
+  <circle cx="119" cy="142" r="9" fill="#8CD8FF"/>
+  <circle cx="421" cy="357" r="6" fill="#8CD8FF"/>
+</svg>
