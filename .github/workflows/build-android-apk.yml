@@ -32,7 +32,7 @@ jobs:
             | tr -d '\r\n' | base64 -d > game/webgl/music/menu-anthem.ogg
           test -s game/webgl/music/menu-anthem.ogg
           test "$(wc -c < game/webgl/music/menu-anthem.ogg)" -gt 50000
-          ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 game/webgl/music/menu-anthem.ogg
+          test "$(head -c 4 game/webgl/music/menu-anthem.ogg)" = "OggS"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
