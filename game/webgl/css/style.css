@@ -82,3 +82,117 @@ td .g{font-size:14px}
 .tabs .btn.on{border-color:#ffb347;color:#ffd77a;background:linear-gradient(180deg,#3a2a10,#241a08)}
 .cargoBar{height:8px;background:#101a30;border:1px solid #2a3f66;border-radius:5px;margin:6px 0;overflow:hidden}
 .cargoBar i{display:block;height:100%;background:linear-gradient(90deg,#66d98c,#ffd77a)}
+
+/* ===== KR3 adaptive UI: phones, tablets, ultrawide landscape ===== */
+:root{
+  --kr3-safe-top:max(env(safe-area-inset-top),0px);
+  --kr3-safe-right:max(env(safe-area-inset-right),0px);
+  --kr3-safe-bottom:max(env(safe-area-inset-bottom),0px);
+  --kr3-safe-left:max(env(safe-area-inset-left),0px)
+}
+html,body,#app{width:100%;min-width:0;min-height:100%}
+#menu{width:100vw;height:100vh;height:100dvh;overflow:hidden}
+#menuInner{
+  height:100%;
+  min-height:0;
+  max-height:100vh;
+  max-height:100dvh;
+  justify-content:safe center;
+  gap:clamp(6px,1.45vh,12px);
+  padding-top:calc(clamp(8px,2vh,20px) + var(--kr3-safe-top));
+  padding-right:calc(clamp(8px,2vw,20px) + var(--kr3-safe-right));
+  padding-bottom:calc(clamp(8px,2vh,20px) + var(--kr3-safe-bottom));
+  padding-left:calc(clamp(8px,2vw,20px) + var(--kr3-safe-left));
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  touch-action:pan-y;
+  scrollbar-width:none
+}
+#menuInner::-webkit-scrollbar{display:none}
+#menuInner h1{
+  flex:0 0 auto;
+  font-size:clamp(24px,min(5.5vw,7vh),54px);
+  line-height:.98;
+  max-width:min(94vw,900px)
+}
+#menuInner .sub{
+  flex:0 0 auto;
+  font-size:clamp(10px,min(1.8vw,2.15vh),15px);
+  line-height:1.25;
+  margin-bottom:clamp(4px,1.8vh,16px)
+}
+.mbtn{
+  flex:0 0 auto;
+  width:min(78vw,320px);
+  max-width:calc(100vw - var(--kr3-safe-left) - var(--kr3-safe-right) - 24px);
+  min-height:clamp(38px,6.4vh,48px);
+  padding:clamp(8px,1.65vh,14px) clamp(12px,2vw,16px);
+  font-size:clamp(11px,2vh,15px);
+  line-height:1.15
+}
+.ver{flex:0 0 auto;margin-top:clamp(4px,1.5vh,18px);font-size:clamp(9px,1.5vh,11px)}
+.pbox{max-height:calc(100dvh - var(--kr3-safe-top) - var(--kr3-safe-bottom) - 20px)}
+#panel{padding:var(--kr3-safe-top) var(--kr3-safe-right) var(--kr3-safe-bottom) var(--kr3-safe-left)}
+#tl{top:calc(10px + var(--kr3-safe-top));left:calc(12px + var(--kr3-safe-left))}
+#tr{top:calc(10px + var(--kr3-safe-top));right:calc(12px + var(--kr3-safe-right))}
+#tbtns{right:calc(14px + var(--kr3-safe-right));bottom:calc(16px + var(--kr3-safe-bottom))}
+#ctx{bottom:calc(14px + var(--kr3-safe-bottom))}
+#galClose{top:calc(12px + var(--kr3-safe-top));left:calc(12px + var(--kr3-safe-left))}
+
+@media (orientation:landscape) and (max-height:760px),
+       (orientation:landscape) and (min-aspect-ratio:19/9) and (max-height:900px){
+  #menuInner{
+    justify-content:flex-start;
+    gap:clamp(4px,1vh,7px);
+    padding-top:calc(6px + var(--kr3-safe-top));
+    padding-bottom:calc(6px + var(--kr3-safe-bottom))
+  }
+  #menuInner h1{font-size:clamp(22px,5.4vh,38px);line-height:.94;letter-spacing:1px}
+  #menuInner .sub{font-size:clamp(9px,1.85vh,12px);margin-bottom:clamp(2px,.8vh,6px)}
+  .mbtn{
+    width:min(72vw,320px);
+    min-height:clamp(34px,5.8vh,42px);
+    padding:clamp(6px,1vh,9px) 12px;
+    border-radius:10px;
+    font-size:clamp(10px,1.9vh,13px)
+  }
+  .ver{margin-top:2px;font-size:9px}
+  #mm{width:108px;height:108px}
+  #tl{min-width:185px;padding:7px 10px}
+  #questLog{top:132px;max-width:220px}
+  #phase{font-size:11px;padding:5px 10px;max-width:52vw}
+  #ctx{gap:5px;max-width:82vw}
+  #ctx button{padding:7px 10px;font-size:10px;border-radius:9px}
+  #bTurn{width:74px;height:74px;font-size:12px}
+  #bWait,#bMis{width:52px;height:52px}
+  #tbtns{gap:7px}
+}
+
+@media (orientation:landscape) and (max-height:600px){
+  #menuInner{gap:3px}
+  #menuInner h1{font-size:clamp(20px,5.1vh,30px)}
+  #menuInner .sub{font-size:9px;line-height:1.1;margin-bottom:2px}
+  .mbtn{min-height:30px;padding:5px 10px;font-size:10px;border-radius:9px}
+  .ver{font-size:8px}
+  #mm{width:92px;height:92px}
+  #tl{transform:scale(.88);transform-origin:top left}
+  #tr{transform:scale(.9);transform-origin:top right}
+  #questLog{top:112px;font-size:9px;max-width:190px}
+  #phase{font-size:10px;padding:4px 8px}
+  #bTurn{width:64px;height:64px;font-size:10px}
+  #bWait,#bMis{width:44px;height:44px;font-size:8px}
+}
+
+@media (max-width:700px){
+  #menuInner h1{font-size:clamp(22px,8vw,36px)}
+  .mbtn{width:min(88vw,320px)}
+  .pbox{width:96vw;padding:12px 14px}
+  #phase{max-width:46vw}
+}
+
+@media (min-width:1800px) and (min-height:900px){
+  #menuInner h1{font-size:clamp(48px,4vw,68px)}
+  .mbtn{width:min(34vw,380px);font-size:16px;min-height:52px}
+  #mm{width:150px;height:150px}
+}
