@@ -1,10 +1,15 @@
-/* KR3 v0.4.1 Alpha hotfix: responsive menu + local-only branding fallback */
+/* KR3 v0.4.1 Alpha hotfix: responsive menu + stable local branding */
 #menu{overflow:hidden}
 #menuBg{
   background:
-    radial-gradient(circle at 50% 22%,rgba(34,86,130,.35),transparent 34%),
-    radial-gradient(circle at 72% 68%,rgba(44,72,120,.24),transparent 38%),
-    linear-gradient(180deg,#07111c 0%,#02050a 100%) !important;
+    linear-gradient(180deg,rgba(3,7,15,.18) 0%,rgba(2,5,10,.76) 82%,rgba(2,4,9,.94) 100%),
+    radial-gradient(circle at 50% 22%,rgba(34,86,130,.18),transparent 38%),
+    url('../assets/menu-background.svg') center/cover no-repeat !important;
+  background-color:#02050a!important;
+  transform:scale(1.015);
+}
+#menuBg:after{
+  background:linear-gradient(180deg,rgba(4,6,13,.08),rgba(4,6,13,.68) 82%)!important;
 }
 #menuInner{
   width:100%;
@@ -34,6 +39,7 @@
   flex:0 0 auto;
   transform:none;
 }
+#kr3AnthemPanel{position:relative;z-index:26;flex:0 0 auto}
 .mbtn{margin:0!important}
 @media (orientation:landscape) and (max-height:760px){
   #menuInner{justify-content:flex-start;padding-block:calc(5px + var(--kr3-safe-top,0px)) calc(5px + var(--kr3-safe-bottom,0px));gap:4px}
@@ -41,11 +47,13 @@
   #menuInner h1{font-size:clamp(18px,4.4vh,30px);line-height:.96}
   #menuInner .sub{font-size:9px;line-height:1.08;margin-bottom:1px}
   .mbtn{min-height:30px!important;padding:5px 10px!important;font-size:10px!important}
+  #kr3AnthemPanel{margin-top:2px!important;gap:1px!important}
+  #kr3AnthemStatus{font-size:8px!important}
   .ver{margin-top:1px!important;font-size:8px!important}
 }
 @media (orientation:landscape) and (max-height:520px){
   #kr3MenuLogo{width:54px;max-height:54px}
   #menuInner h1{font-size:17px}
-  #menuInner .sub{display:none}
+  #menuInner .sub,#kr3AnthemStatus{display:none}
   .mbtn{min-height:28px!important;padding:4px 9px!important}
 }
