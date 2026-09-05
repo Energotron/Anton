@@ -14,12 +14,12 @@ permissions:
 
 concurrency:
   group: kr3-menu-mp3-integration
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   integrate:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 20
 
     steps:
       - name: Checkout latest WebGL master
@@ -41,12 +41,24 @@ jobs:
         run: python -m pip install --upgrade 'yt-dlp[default,curl-cffi]'
 
       - name: Build verified compressed MP3
-        run: bash .github/scripts/fetch-menu-mp3.sh game/webgl/music/menu-anthem.mp3
+        shell: bash
+        run: |
+          set -euo pipefail
+          target='game/webgl/music/menu-anthem.mp3'
+          if test -s "$target"; then
+            duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$target" || true)"
+            if test -n "$duration" && awk -v d="$duration" 'BEGIN { exit !(d >= 245.0 && d <= 265.0) }'; then
+              echo "Reusing verified repository MP3 (${duration}s)."
+              exit 0
+            fi
+          fi
+          bash .github/scripts/fetch-menu-mp3.sh "$target"
 
-      - name: Integrate player with existing WebGL audio engine
+      - name: Integrate one menu audio runtime
         run: |
           python .github/scripts/integrate-menu-mp3.py
           rm -f game/webgl/music/menu-anthem.ogg
+          rm -f game/webgl/src/menuAudioPlaceholderRuntime.js
 
       - name: Verify integration and WebGL build
         shell: bash
@@ -54,10 +66,14 @@ jobs:
           set -euo pipefail
           test -s game/webgl/music/menu-anthem.mp3
           test ! -e game/webgl/music/menu-anthem.ogg
+          test ! -e game/webgl/src/menuAudioPlaceholderRuntime.js
           grep -q "const MENU_ANTHEM = 'music/menu-anthem.mp3';" game/webgl/js/main.js
-          grep -q "document.getElementById('kr3MenuAudio')" game/webgl/js/main.js
-          grep -q 'id="kr3MenuPlayer"' game/webgl/index.html
-          grep -q 'src="music/menu-anthem.mp3"' game/webgl/index.html
+          grep -Fq 'window.KR3MenuAnthem?.autoplay?.()' game/webgl/js/main.js
+          grep -q 'src="src/menuAnthemRuntime.js"' game/webgl/index.html
+          grep -q "const LOCAL_SOURCE = 'music/menu-anthem.mp3';" game/webgl/src/menuAnthemRuntime.js
+          grep -q 'audio.loop = true;' game/webgl/src/menuAnthemRuntime.js
+          ! grep -q 'id="kr3MenuPlayer"' game/webgl/index.html
+          ! grep -q 'id="kr3MenuAudio"' game/webgl/index.html
           duration="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 game/webgl/music/menu-anthem.mp3)"
           awk -v d="$duration" 'BEGIN { exit !(d >= 245.0 && d <= 265.0) }'
           cd game/webgl
@@ -75,12 +91,12 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add game/webgl/index.html game/webgl/js/main.js game/webgl/music/menu-anthem.mp3
-          git rm -f --ignore-unmatch game/webgl/music/menu-anthem.ogg
+          git rm -f --ignore-unmatch game/webgl/music/menu-anthem.ogg game/webgl/src/menuAudioPlaceholderRuntime.js
           if git diff --cached --quiet; then
             echo 'MP3 menu player is already integrated.'
             exit 0
           fi
-          git commit -m 'feat(webgl): add compressed MP3 anthem player to main menu'
+          git commit -m 'feat(webgl): add looping MP3 anthem to main menu'
           for attempt in 1 2 3; do
             git pull --rebase origin master
             if git push origin HEAD:master; then
