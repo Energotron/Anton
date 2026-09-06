@@ -9,11 +9,20 @@ let youtubeFrame = null;
 let mode = null;
 let playing = false;
 let loading = false;
-let localProbe = null;
 let localAvailable = null;
 let autoplayAttempted = false;
 let autoplayTimer = null;
 let autoplayMuted = false;
+let fallbackRequested = false;
+
+function isPackagedRuntime(win = window) {
+  try {
+    const params = new URLSearchParams(win.location.search || '');
+    return params.get('mode') === 'apk' || win.location.hostname === 'appassets.androidplatform.net';
+  } catch (_) {
+    return false;
+  }
+}
 
 function menuVisible(doc = document) {
   const menu = doc.getElementById('menu');
@@ -50,31 +59,18 @@ function syncUi(doc = document, message = '') {
   if (status) {
     status.textContent = message || (
       playing && autoplayMuted
-        ? 'Браузер заблокировал звук · первое действие восстановит его'
+        ? 'Первое действие восстановит звук'
         : playing
           ? (mode === 'local'
-              ? 'Автовоспроизведение со звуком · локальный гимн · 4:14'
-              : 'Автовоспроизведение со звуком · гимн КР3 · 4:14')
-          : 'Главная тема Космических Рейнджеров 3'
+              ? 'Локальный гимн · За краем орбит · играет в главном меню'
+              : 'Резервный сетевой источник · За краем орбит')
+          : mode === 'local' && localAvailable !== false
+            ? 'За краем орбит готова · коснитесь экрана, если браузер запретил autoplay'
+            : 'Главная тема Космических Рейнджеров 3'
     );
   }
 
   if (frameWrap) frameWrap.hidden = mode !== 'youtube' || !youtubeFrame;
-}
-
-function hasLocalAnthem() {
-  if (!localProbe) {
-    localProbe = fetch(LOCAL_SOURCE, { method: 'HEAD', cache: 'no-store' })
-      .then(response => {
-        localAvailable = response.ok;
-        return localAvailable;
-      })
-      .catch(() => {
-        localAvailable = false;
-        return false;
-      });
-  }
-  return localProbe;
 }
 
 function ensureLocalAudio(doc = document) {
@@ -89,24 +85,39 @@ function ensureLocalAudio(doc = document) {
   audio.muted = false;
   audio.setAttribute('playsinline', '');
 
+  audio.addEventListener('loadedmetadata', () => {
+    localAvailable = true;
+  });
+
+  audio.addEventListener('canplay', () => {
+    localAvailable = true;
+  });
+
   audio.addEventListener('play', () => {
+    localAvailable = true;
     playing = true;
     mode = 'local';
+    fallbackRequested = false;
+    if (youtubeFrame) {
+      sendYoutubeCommand('stopVideo');
+      youtubeFrame.remove();
+      youtubeFrame = null;
+    }
     syncUi(doc);
   });
+
   audio.addEventListener('pause', () => {
     if (mode === 'local') playing = false;
     syncUi(doc);
   });
+
   audio.addEventListener('error', () => {
     localAvailable = false;
-    localProbe = Promise.resolve(false);
-    if (mode === 'local') {
-      mode = null;
-      playing = false;
-      autoplayMuted = false;
-      syncUi(doc, 'Локальный файл недоступен — используется сетевой гимн');
-    }
+    if (mode !== 'local' || !menuVisible(doc)) return;
+    playing = false;
+    autoplayMuted = false;
+    syncUi(doc, 'Локальный гимн не загрузился · включаю резервный источник');
+    requestYoutubeFallback(doc);
   });
 
   localAudio = audio;
@@ -119,20 +130,29 @@ function unmuteAnthem(doc = document) {
     sendYoutubeCommand('setVolume', [MENU_VOLUME]);
     sendYoutubeCommand('playVideo');
     playing = true;
-  } else if (mode === 'local' && localAudio) {
-    localAudio.muted = false;
-    localAudio.volume = MENU_VOLUME / 100;
-    localAudio.play().then(() => {
-      playing = true;
-      syncUi(doc);
-    }).catch(() => {});
+    autoplayMuted = false;
+    syncUi(doc);
+    return;
   }
 
-  autoplayMuted = false;
-  syncUi(doc);
+  const audio = ensureLocalAudio(doc);
+  mode = 'local';
+  audio.muted = false;
+  audio.volume = MENU_VOLUME / 100;
+  audio.play().then(() => {
+    localAvailable = true;
+    playing = true;
+    autoplayMuted = false;
+    syncUi(doc);
+  }).catch(() => {
+    playing = false;
+    syncUi(doc, 'Коснитесь кнопки гимна для запуска звука');
+  });
 }
 
 function ensureYoutubePlayer(doc = document, { mutedAutoplay = false } = {}) {
+  if (localAvailable !== false) return null;
+
   if (youtubeFrame) {
     if (mutedAutoplay) sendYoutubeCommand('mute');
     else sendYoutubeCommand('unMute');
@@ -161,24 +181,11 @@ function ensureYoutubePlayer(doc = document, { mutedAutoplay = false } = {}) {
   frame.style.cssText = 'width:min(360px,82vw);aspect-ratio:16/9;border:1px solid rgba(255,215,122,.45);border-radius:10px;display:block;margin:8px auto 0;background:#000;box-shadow:0 10px 28px rgba(0,0,0,.45)';
 
   frame.addEventListener('load', () => {
-    if (!menuVisible(doc)) return;
-
-    const requestSoundPlayback = () => {
-      if (!menuVisible(doc) || !youtubeFrame) return;
-      sendYoutubeCommand('unMute');
-      sendYoutubeCommand('setVolume', [MENU_VOLUME]);
-      sendYoutubeCommand('playVideo');
-    };
-
-    if (mutedAutoplay) {
-      sendYoutubeCommand('mute');
-      sendYoutubeCommand('playVideo');
-    } else {
-      requestSoundPlayback();
-      setTimeout(requestSoundPlayback, 250);
-      setTimeout(requestSoundPlayback, 800);
-      setTimeout(requestSoundPlayback, 1600);
-    }
+    if (!menuVisible(doc) || localAvailable !== false) return;
+    if (mutedAutoplay) sendYoutubeCommand('mute');
+    else sendYoutubeCommand('unMute');
+    sendYoutubeCommand('setVolume', [MENU_VOLUME]);
+    sendYoutubeCommand('playVideo');
   });
 
   frameWrap.replaceChildren(frame);
@@ -187,10 +194,58 @@ function ensureYoutubePlayer(doc = document, { mutedAutoplay = false } = {}) {
   mode = 'youtube';
   playing = true;
   autoplayMuted = mutedAutoplay;
-  syncUi(doc, mutedAutoplay
-    ? 'Видео запущено без звука · браузер ограничил autoplay'
-    : '🚀 Запрашиваю автозапуск гимна сразу со звуком');
+  syncUi(doc, 'Резервный источник гимна');
   return frame;
+}
+
+function requestYoutubeFallback(doc = document) {
+  if (fallbackRequested || localAvailable !== false || !menuVisible(doc)) return;
+  fallbackRequested = true;
+  ensureYoutubePlayer(doc, { mutedAutoplay: false });
+}
+
+async function playLocalAnthem(doc = document, { autoplay = false } = {}) {
+  if (!menuVisible(doc)) return false;
+
+  const audio = ensureLocalAudio(doc);
+  mode = 'local';
+  audio.muted = false;
+  audio.volume = MENU_VOLUME / 100;
+
+  try {
+    await audio.play();
+    localAvailable = true;
+    playing = true;
+    autoplayMuted = false;
+    fallbackRequested = false;
+    return true;
+  } catch (error) {
+    playing = false;
+
+    // A NotAllowedError means the browser rejected automatic sound, not that
+    // our bundled/local MP3 is missing. Keep the local source selected so the
+    // very first pointer/key gesture can start it instead of showing YouTube.
+    if (error?.name === 'NotAllowedError') {
+      syncUi(doc, autoplay
+        ? 'За краем орбит готова · первое касание включит звук'
+        : 'Коснитесь кнопки гимна ещё раз для запуска звука');
+      return false;
+    }
+
+    // In the Android APK the track is bundled with the app. Do not race an
+    // HTTP HEAD probe against startup: WebView can take longer than the old
+    // 180 ms timeout even though the MP3 is present and playable.
+    if (isPackagedRuntime()) {
+      syncUi(doc, 'Загружаю локальный гимн из APK…');
+      return false;
+    }
+
+    if (localAvailable === false || audio.error) {
+      localAvailable = false;
+      requestYoutubeFallback(doc);
+    }
+    return false;
+  }
 }
 
 async function playAnthem(doc = document, options = {}) {
@@ -198,49 +253,18 @@ async function playAnthem(doc = document, options = {}) {
 
   const autoplay = options.autoplay === true;
   loading = true;
-  syncUi(doc, autoplay ? '🚀 Запуск гимна главного меню со звуком…' : 'Подключаю главную тему…');
+  syncUi(doc, autoplay ? '🚀 Запуск За краем орбит…' : 'Подключаю главную тему…');
 
   try {
-    if (localAvailable === null) {
-      if (autoplay) {
-        const probeResult = await Promise.race([
-          hasLocalAnthem(),
-          new Promise(resolve => setTimeout(() => resolve(false), 180))
-        ]);
-        if (probeResult === true) localAvailable = true;
-      } else {
-        await hasLocalAnthem();
-      }
+    // Local-first, always. The actual audio element decides availability.
+    // This removes the first-launch race where a slow HEAD request caused a
+    // YouTube placeholder even though the MP3 was already bundled locally.
+    if (localAvailable !== false) {
+      await playLocalAnthem(doc, { autoplay });
+      return;
     }
 
-    if (localAvailable === true) {
-      mode = 'local';
-      if (youtubeFrame) {
-        sendYoutubeCommand('stopVideo');
-        youtubeFrame.remove();
-        youtubeFrame = null;
-      }
-
-      const audio = ensureLocalAudio(doc);
-      audio.muted = false;
-      autoplayMuted = false;
-
-      try {
-        await audio.play();
-        playing = true;
-        return;
-      } catch (error) {
-        console.warn('KR3 local menu anthem autoplay with sound:', error);
-        if (!autoplay || error?.name !== 'NotAllowedError') {
-          localAvailable = false;
-        }
-      }
-    }
-
-    // Sound-first: request unmuted YouTube autoplay. Browsers that have granted
-    // autoplay permission (prior interaction / installed PWA / engagement) will
-    // start the anthem immediately with sound.
-    ensureYoutubePlayer(doc, { mutedAutoplay: false });
+    requestYoutubeFallback(doc);
   } finally {
     loading = false;
     syncUi(doc);
@@ -262,7 +286,7 @@ function stopAnthem(doc = document) {
 
   if (localAudio) {
     localAudio.pause();
-    localAudio.currentTime = 0;
+    try { localAudio.currentTime = 0; } catch (_) {}
     localAudio.muted = false;
   }
   if (youtubeFrame) {
@@ -274,6 +298,7 @@ function stopAnthem(doc = document) {
   playing = false;
   mode = null;
   autoplayMuted = false;
+  fallbackRequested = false;
   syncUi(doc);
 }
 
@@ -296,7 +321,7 @@ function scheduleAutoplay(doc = document, win = window) {
       console.warn('KR3 menu anthem autoplay:', error);
       playing = false;
       autoplayMuted = false;
-      syncUi(doc, 'Автозапуск звука заблокирован браузером · нажмите для запуска');
+      syncUi(doc, 'За краем орбит готова · коснитесь экрана для запуска');
     });
   }, AUTOPLAY_DELAY_MS);
 }
@@ -311,7 +336,7 @@ function mountAnthemUi(doc = document) {
   panel.style.cssText = 'display:grid;justify-items:center;gap:4px;margin-top:8px';
   panel.innerHTML = `
     <button class="mbtn ghost" id="btnMenuAnthem" type="button">▶ ГИМН КР3 — ЗА КРАЕМ ОРБИТ</button>
-    <div id="kr3AnthemStatus" style="font-size:11px;letter-spacing:.08em;color:#ffd77a;opacity:.84;text-align:center">Автовоспроизведение главной темы со звуком</div>
+    <div id="kr3AnthemStatus" style="font-size:11px;letter-spacing:.08em;color:#ffd77a;opacity:.84;text-align:center">Автовоспроизведение локальной главной темы</div>
     <div id="kr3AnthemFrameWrap" hidden></div>`;
 
   const version = menuInner.querySelector('.ver');
@@ -343,10 +368,13 @@ function bindGestureRecovery(doc = document) {
       return;
     }
 
-    if (mode === 'local' && localAudio) {
-      localAudio.muted = false;
-      localAudio.volume = MENU_VOLUME / 100;
-      localAudio.play().then(() => {
+    if (localAvailable !== false) {
+      const audio = ensureLocalAudio(doc);
+      mode = 'local';
+      audio.muted = false;
+      audio.volume = MENU_VOLUME / 100;
+      audio.play().then(() => {
+        localAvailable = true;
         playing = true;
         autoplayMuted = false;
         syncUi(doc);
@@ -354,7 +382,7 @@ function bindGestureRecovery(doc = document) {
       return;
     }
 
-    if (!playing) playAnthem(doc).catch(() => {});
+    if (!playing) requestYoutubeFallback(doc);
   };
 
   doc.addEventListener('pointerdown', recover, { capture: true });
@@ -363,6 +391,11 @@ function bindGestureRecovery(doc = document) {
 
 export function bindMenuAnthem(doc = document, win = window) {
   mountAnthemUi(doc);
+
+  // In the APK the MP3 is part of assets/www and WebView explicitly allows
+  // media playback without a user gesture. Mark it available immediately so
+  // first-launch playback never waits on a network-style HEAD probe.
+  if (isPackagedRuntime(win)) localAvailable = true;
 
   doc.addEventListener('click', event => {
     const target = event.target instanceof Element ? event.target : null;
@@ -392,7 +425,8 @@ export function bindMenuAnthem(doc = document, win = window) {
   win.addEventListener('pagehide', () => stopAnthem(doc));
   bindGestureRecovery(doc);
 
-  hasLocalAnthem().catch(() => false);
+  // Prime the actual local media element instead of probing it with fetch().
+  ensureLocalAudio(doc).load();
   scheduleAutoplay(doc, win);
 
   win.KR3MenuAnthem = Object.freeze({
