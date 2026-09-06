@@ -54,3 +54,104 @@
   #menuInner .sub,#kr3AnthemStatus{display:none}
   .mbtn{min-height:28px!important;padding:4px 9px!important}
 }
+
+/* ===== Flight HUD v2: strict two-row control zones =====
+   Context actions and turn controls never share the same screen area. */
+#ctx{
+  left:calc(12px + var(--kr3-safe-left,0px));
+  right:calc(210px + var(--kr3-safe-right,0px));
+  bottom:calc(12px + var(--kr3-safe-bottom,0px));
+  transform:none;
+  max-width:none;
+  display:grid;
+  grid-auto-flow:column;
+  grid-template-rows:repeat(2,minmax(40px,auto));
+  grid-auto-columns:minmax(112px,max-content);
+  justify-content:center;
+  align-items:stretch;
+  align-content:end;
+  gap:7px 8px;
+}
+#ctx:empty{display:none}
+#ctx button{
+  min-width:112px;
+  max-width:190px;
+  min-height:40px;
+  padding:8px 12px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+#tbtns{
+  right:calc(12px + var(--kr3-safe-right,0px));
+  bottom:calc(12px + var(--kr3-safe-bottom,0px));
+  display:grid;
+  grid-template-columns:auto auto;
+  grid-template-rows:auto auto;
+  align-items:center;
+  align-content:end;
+  justify-items:center;
+  gap:6px;
+}
+#bWait{grid-column:1;grid-row:1}
+#bMis{grid-column:1;grid-row:2}
+#bTurn{grid-column:2;grid-row:1 / span 2;align-self:center}
+
+/* Top-right utility controls are also two rows after the save-slot button is mounted. */
+#trBtns{
+  display:grid;
+  grid-template-columns:repeat(2,38px);
+  grid-auto-rows:34px;
+  gap:6px;
+}
+#flightSaveSlotsBtn{
+  grid-column:1 / span 2;
+  width:auto!important;
+  min-width:82px;
+  font-size:16px!important;
+}
+
+/* Toasts stay clear of both rows of flight controls. */
+#toasts{bottom:calc(112px + var(--kr3-safe-bottom,0px))}
+
+/* Save manager remains usable on short landscape screens. */
+#saveSlotsPanel .save-slot-actions .btn{min-width:0;width:100%;white-space:normal;line-height:1.15}
+
+@media (orientation:landscape) and (max-width:1100px){
+  #ctx{
+    right:calc(174px + var(--kr3-safe-right,0px));
+    grid-auto-columns:minmax(92px,1fr);
+    gap:5px 6px;
+  }
+  #ctx button{min-width:92px;max-width:155px;min-height:36px;padding:6px 8px;font-size:10px}
+  #bTurn{width:72px;height:72px;font-size:11px}
+  #bWait,#bMis{width:48px;height:48px;font-size:8px}
+  #tbtns{gap:4px}
+  #toasts{bottom:calc(96px + var(--kr3-safe-bottom,0px))}
+}
+
+@media (orientation:landscape) and (max-height:560px){
+  #ctx{
+    left:calc(8px + var(--kr3-safe-left,0px));
+    right:calc(158px + var(--kr3-safe-right,0px));
+    bottom:calc(7px + var(--kr3-safe-bottom,0px));
+    grid-template-rows:repeat(2,minmax(32px,auto));
+    grid-auto-columns:minmax(84px,1fr);
+    gap:4px 5px;
+  }
+  #ctx button{min-width:84px;max-width:140px;min-height:32px;padding:5px 7px;font-size:9px;border-radius:9px}
+  #tbtns{right:calc(7px + var(--kr3-safe-right,0px));bottom:calc(7px + var(--kr3-safe-bottom,0px));gap:3px}
+  #bTurn{width:62px;height:62px;font-size:9px}
+  #bWait,#bMis{width:42px;height:42px;font-size:7px}
+  #toasts{bottom:calc(82px + var(--kr3-safe-bottom,0px))}
+  #saveSlotsPanel{padding:8px!important}
+  #saveSlotsPanel h2{font-size:16px}
+  #saveSlotsPanel p{font-size:11px}
+  #saveSlotsPanel .save-slot-actions{gap:5px!important}
+  #saveSlotsPanel .save-slot-actions .btn{padding:7px 8px;font-size:9px}
+}
+
+@media (max-width:760px){
+  #saveSlotsPanel .save-slot-actions{grid-template-columns:1fr!important}
+}
